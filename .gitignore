@@ -1,0 +1,23 @@
+# cache
+__pycache__
+.pytest_cache
+*.db
+.DS_Store
+~$*.xlsx
+~$*.pptx
+*pptx
+
+# coverage
+.coverage
+coverage
+coverage.xml
+
+# Virtual environments
+backend/venv
+
+backend/.env/
+
+# word addin
+frontend/node_modules/
+frontend/dist/
+node_modules

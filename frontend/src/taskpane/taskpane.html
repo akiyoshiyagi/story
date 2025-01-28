@@ -1,0 +1,97 @@
+<!-- Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT License. -->
+<!-- This file shows how to design a first-run page that provides a welcome screen to the user about the features of the add-in. -->
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ストーリーチェッカー</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+
+    <!-- For more information on Fluent UI, visit https://developer.microsoft.com/fluentui -->
+    <link rel="stylesheet" href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/11.0.0/css/fabric.min.css"/>
+
+    <!-- Template styles -->
+    <link href="taskpane.css" rel="stylesheet" type="text/css" />
+</head>
+
+<body class="ms-font-m ms-Fabric">
+    <header class="ms-welcome__header">
+        <h1 class="ms-font-xl">ストーリーチェッカー</h1>
+    </header>
+    <main class="ms-welcome__main">
+        <div class="score-section">
+            <h2>スコア</h2>
+            <div id="score" class="score">-</div>
+        </div>
+
+        <div class="evaluation-section">
+            <h2>評価観点</h2>
+            <div class="evaluation-list">
+                <div class="evaluation-item">
+                    <div class="evaluation-header">
+                        <span class="evaluation-title">全文修辞表現</span>
+                        <span id="status-full-text-rhetoric" class="evaluation-status">-</span>
+                    </div>
+                    <div id="content-full-text-rhetoric" class="evaluation-content"></div>
+                </div>
+                <div class="evaluation-item">
+                    <div class="evaluation-header">
+                        <span class="evaluation-title">サマリーの論理展開</span>
+                        <span id="status-summary-logic-flow" class="evaluation-status">-</span>
+                    </div>
+                    <div id="content-summary-logic-flow" class="evaluation-content"></div>
+                </div>
+                <div class="evaluation-item">
+                    <div class="evaluation-header">
+                        <span class="evaluation-title">サマリー単体の論理</span>
+                        <span id="status-summary-internal-logic" class="evaluation-status">-</span>
+                    </div>
+                    <div id="content-summary-internal-logic" class="evaluation-content"></div>
+                </div>
+                <div class="evaluation-item">
+                    <div class="evaluation-header">
+                        <span class="evaluation-title">サマリーとストーリー間の論理</span>
+                        <span id="status-summary-story-logic" class="evaluation-status">-</span>
+                    </div>
+                    <div id="content-summary-story-logic" class="evaluation-content"></div>
+                </div>
+                <div class="evaluation-item">
+                    <div class="evaluation-header">
+                        <span class="evaluation-title">ストーリー単体の論理</span>
+                        <span id="status-story-internal-logic" class="evaluation-status">-</span>
+                    </div>
+                    <div id="content-story-internal-logic" class="evaluation-content"></div>
+                </div>
+                <div class="evaluation-item">
+                    <div class="evaluation-header">
+                        <span class="evaluation-title">細部の修辞表現</span>
+                        <span id="status-detail-rhetoric" class="evaluation-status">-</span>
+                    </div>
+                    <div id="content-detail-rhetoric" class="evaluation-content"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-section">
+            <div id="loading-spinner" class="loading-spinner"></div>
+            <p id="status" class="status"></p>
+        </div>
+
+        <div class="button-section">
+            <button id="check-button" class="ms-Button ms-Button--primary">
+                <span class="ms-Button-label">実行</span>
+            </button>
+            <button id="test-button" class="ms-Button ms-Button--default">
+                <span class="ms-Button-label">テスト実行</span>
+            </button>
+        </div>
+    </main>
+</body>
+
+</html>

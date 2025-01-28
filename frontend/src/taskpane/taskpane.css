@@ -1,0 +1,459 @@
+/* 
+ * Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT license.
+ * See LICENSE in the project root for license information.
+ */
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+ul {
+    margin: 0;
+    padding: 0 0 0 20px;
+}
+
+li {
+    font-size: 11px;
+    margin-bottom: 2px;
+}
+
+.ms-welcome__header {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: #2b579a;
+    color: #fff;
+    height: 38px;
+    box-sizing: border-box;
+}
+
+.ms-welcome__header h1 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.ms-welcome__main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px;
+    height: calc(100vh - 38px); /* ヘッダーの高さを引く */
+    box-sizing: border-box;
+}
+
+.score-section {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.score-section h2 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.score {
+    font-size: 24px;
+    font-weight: bold;
+    color: #2b579a;
+    margin: 4px 0;
+}
+
+.evaluation-section {
+    width: 100%;
+    margin-bottom: 8px;
+    flex: 1;
+    min-height: 0; /* Flexboxでのスクロール制御に必要 */
+    overflow: auto;
+}
+
+.evaluation-section h2 {
+    margin: 0 0 4px 0;
+    font-size: 14px;
+}
+
+.evaluation-list {
+    width: 100%;
+    margin-bottom: 8px; /* 評価リストの下部にマージンを追加 */
+}
+
+.evaluation-item {
+    margin-bottom: 6px;
+    border: 1px solid #e1e1e1;
+    border-radius: 4px;
+}
+
+.evaluation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    background-color: #f8f8f8;
+    border-bottom: 1px solid #e1e1e1;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+}
+
+.evaluation-header:hover {
+    background-color: #f0f0f0;
+}
+
+.evaluation-header .expand-icon {
+    width: 16px;
+    height: 16px;
+    margin-left: 8px;
+    transition: transform 0.2s ease;
+}
+
+.evaluation-header .expand-icon.rotated {
+    transform: rotate(180deg);
+}
+
+.evaluation-title {
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.evaluation-status {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 11px;
+}
+
+.evaluation-status.ok {
+    background-color: #dff6dd;
+    color: #107c10;
+}
+
+.evaluation-status.ng {
+    background-color: #fde7e9;
+    color: #a80000;
+}
+
+.evaluation-content {
+    max-height: 150px;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+}
+
+.evaluation-content.expanded {
+    max-height: none;
+}
+
+.suggestions {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px dashed #e1e1e1;
+}
+
+.status-section {
+    width: 100%;
+    text-align: center;
+    margin: 4px 0;
+    min-height: 22px; /* ステータスメッセージの高さを確保 */
+}
+
+.status {
+    margin: 10px 0;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.status.error {
+    background-color: #fde7e9;
+    color: #a80000;
+    border: 1px solid #f1707b;
+}
+
+.status.success {
+    background-color: #dff6dd;
+    color: #107c10;
+    border: 1px solid #9ad29a;
+}
+
+.status.retry {
+    background-color: #fff4ce;
+    color: #805600;
+    border: 1px solid #ffd335;
+}
+
+.status.loading {
+    position: relative;
+    padding-right: 30px;
+}
+
+.status.loading::after {
+    content: '';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    border: 2px solid #805600;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: translateY(-50%) rotate(0deg); }
+    100% { transform: translateY(-50%) rotate(360deg); }
+}
+
+.recovery-steps {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #fff;
+    border: 1px solid #e1e1e1;
+    border-radius: 4px;
+}
+
+.recovery-steps h3 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    color: #333;
+}
+
+.recovery-steps ol {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.recovery-steps ul {
+    margin: 5px 0;
+    padding-left: 20px;
+}
+
+.recovery-steps li {
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: #666;
+}
+
+.button-section {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 4px 0 12px 0; /* 下部のパディングを増やす */
+    margin-top: 4px; /* 上部マージンを追加 */
+}
+
+.ms-Button.ms-Button--primary {
+    background-color: #2b579a;
+    border-color: #2b579a;
+    color: #fff;
+    min-width: 80px;
+    height: 28px;
+}
+
+.ms-Button.ms-Button--primary:hover {
+    background-color: #204072;
+    border-color: #204072;
+}
+
+.ms-Button-label {
+    font-size: 12px;
+    line-height: 28px;
+    margin: 0;
+    padding: 0 10px;
+}
+
+b {
+    font-weight: bold;
+}
+
+/* ローディングスピナー */
+.loading-spinner {
+    display: none;
+    width: 24px;
+    height: 24px;
+    margin: 0 auto;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #2b579a;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* エラーアニメーション */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+.shake {
+    animation: shake 0.5s ease-in-out;
+}
+
+/* ボタンのローディング状態 */
+.ms-Button.loading {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.ms-Button.loading .ms-Button-label::after {
+    content: "中...";
+}
+
+.feedback-section {
+    padding: 8px;
+}
+
+.feedback-points h4,
+.suggestions h4 {
+    margin: 0 0 4px 0;
+    font-size: 12px;
+    color: #333;
+}
+
+.feedback-points ul,
+.suggestions ul {
+    margin: 0;
+    padding-left: 16px;
+}
+
+.feedback-points li {
+    position: relative;
+    margin-bottom: 4px;
+    padding-left: 16px;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.feedback-points li.positive::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    color: #107c10;
+}
+
+.feedback-points li.negative::before {
+    content: '!';
+    position: absolute;
+    left: 0;
+    color: #a80000;
+}
+
+.score-detail {
+    margin: 8px 0;
+    padding: 4px;
+    background-color: #f8f8f8;
+    border-radius: 3px;
+}
+
+.score-bar-container {
+    width: 100%;
+    height: 6px;
+    background-color: #e1e1e1;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.score-bar {
+    height: 100%;
+    background-color: #2b579a;
+    transition: width 0.5s ease-out;
+}
+
+.score-value {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #666;
+    text-align: right;
+}
+
+.suggestion-item {
+    position: relative;
+    margin-bottom: 4px;
+    padding-left: 16px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #666;
+}
+
+.suggestion-item::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: #2b579a;
+}
+
+/* フェードインアニメーション */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* ツールチップ */
+.has-tooltip {
+    position: relative;
+    cursor: help;
+}
+
+.tooltip {
+    position: absolute;
+    z-index: 1000;
+    padding: 6px 10px;
+    background-color: #333;
+    color: #fff;
+    font-size: 11px;
+    border-radius: 4px;
+    max-width: 200px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    pointer-events: none;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.tooltip::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 0 4px 4px;
+    border-style: solid;
+    border-color: transparent transparent #333;
+}
+
+/* キーボードショートカットのヒント */
+.shortcut-hint {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    font-size: 10px;
+    color: #666;
+    background-color: #f8f8f8;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #e1e1e1;
+}
+
+/* アクセシビリティのフォーカス表示 */
+.evaluation-header:focus {
+    outline: 2px solid #2b579a;
+    outline-offset: -2px;
+}
+
+.evaluation-header:focus:not(:focus-visible) {
+    outline: none;
+}
