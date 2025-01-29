@@ -3,6 +3,7 @@
 """
 from typing import List
 from pydantic import BaseModel
+from ..models.evaluation import EvaluationResult
 
 
 class EvaluationCriteria(BaseModel):
@@ -15,6 +16,8 @@ class EvaluationCriteria(BaseModel):
 class EvaluationResult(BaseModel):
     """評価結果モデル"""
     category: str
-    score: int
+    score: float
+    priority: int
+    target_sentence: str
     feedback: List[str]
     improvement_suggestions: List[str] 

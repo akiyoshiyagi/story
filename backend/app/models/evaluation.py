@@ -1,8 +1,7 @@
-from dataclasses import dataclass
 from typing import List
+from pydantic import BaseModel
 
-@dataclass
-class EvaluationResult:
+class EvaluationResult(BaseModel):
     """文書評価の結果を表すデータクラス"""
     category: str
     score: float

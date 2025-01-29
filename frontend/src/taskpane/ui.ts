@@ -503,9 +503,6 @@ export class UIManager {
      */
     private async addCommentsToDocument(evaluations: EvaluationResult[]): Promise<void> {
         try {
-            console.log("コメント追加処理を開始します");
-            console.log("評価結果:", evaluations);
-
             await Word.run(async (context) => {
                 // 文書全体のパラグラフを取得
                 console.log("文書のパラグラフを取得中...");
@@ -521,74 +518,56 @@ export class UIManager {
                 }
                 console.log("==================");
 
-                // 既に処理した文章を追跡
-                const processedSentences = new Set<string>();
+                // 評価結果をカテゴリごとにグループ化
+                const evaluationsByCategory = this.groupEvaluationsByCategory(evaluations);
 
-                // 各パラグラフに対して評価を適用
-                for (let i = 0; i < paragraphs.items.length; i++) {
-                    const paragraph = paragraphs.items[i];
-                    const paragraphText = paragraph.text.trim();
-                    
-                    if (!paragraphText || processedSentences.has(paragraphText)) {
-                        continue;
-                    }
+                // カテゴリごとに処理
+                for (const [category, categoryEvaluations] of Object.entries(evaluationsByCategory)) {
+                    console.log(`カテゴリ ${category} の評価を処理中...`);
 
-                    // このパラグラフに関連する評価を見つける
-                    const relevantEvaluations = evaluations.filter(evaluation => 
-                        this.isEvaluationRelevantToParagraph(evaluation, paragraphText)
-                    );
+                    // カテゴリ内の評価を優先度順にソート
+                    const sortedEvaluations = categoryEvaluations.sort((a, b) => (b.priority || 0) - (a.priority || 0));
 
-                    if (relevantEvaluations.length === 0) {
-                        continue;
-                    }
+                    for (const evaluation of sortedEvaluations) {
+                        console.log(`評価結果を処理中:`, evaluation);
 
-                    // スコアが最も低い（改善が必要な）評価を選択
-                    const topEvaluation = relevantEvaluations.reduce((min, current) => 
-                        current.score < min.score ? current : min
-                    );
-
-                    // コメントを追加
-                    const range = paragraph.getRange();
-                    await context.sync();
-
-                    // フィードバックと改善提案をフィルタリング
-                    const validFeedback = topEvaluation.feedback.filter(f => !this.isPositiveFeedback(f));
-                    
-                    if (topEvaluation.improvement_suggestions.length > 0) {
-                        // コメントの内容を構築
-                        let commentContent = "";
-                        
-                        // 課題点セクション
-                        commentContent += `【課題点】\n`;
-                        if (validFeedback.length > 0) {
-                            validFeedback.forEach(feedback => {
-                                commentContent += `・${feedback}\n`;
-                            });
-                        } else {
-                            const issue = this.inferIssueFromSuggestion(topEvaluation.improvement_suggestions[0]);
-                            commentContent += `・${issue}\n`;
+                        // 対象文が空の場合の特別処理
+                        if (!evaluation.target_sentence) {
+                            if (category === 'サマリとストーリーの日本語評価') {
+                                // サマリー評価の場合は最初の段落にコメントを追加
+                                await this.addCommentToParagraph(context, paragraphs.items[0], evaluation);
+                                continue;
+                            }
+                            console.log("対象文が空のためスキップ");
+                            continue;
                         }
-                        
-                        // 改善提案セクション
-                        commentContent += `\n【改善提案】\n`;
-                        topEvaluation.improvement_suggestions.forEach(suggestion => {
-                            commentContent += `・${suggestion}\n`;
-                        });
 
-                        try {
-                            await range.insertComment(commentContent);
-                            await context.sync();
-                            processedSentences.add(paragraphText);
-                            console.log(`コメントを追加しました: 段落 ${i + 1}`);
-                        } catch (commentError) {
-                            console.error("コメント追加中にエラーが発生:", commentError);
-                            throw commentError;
+                        // セクション識別子を解析
+                        const { sectionType, targetText } = this.parseSectionIdentifier(evaluation.target_sentence);
+                        console.log(`セクションタイプ: ${sectionType}, 対象文: ${targetText}`);
+
+                        // 対象の段落を探す
+                        let foundParagraph = false;
+                        for (let i = 0; i < paragraphs.items.length; i++) {
+                            const paragraph = paragraphs.items[i];
+                            const paragraphText = paragraph.text.trim();
+
+                            if (this.isMatchingSection(paragraphText, targetText, sectionType)) {
+                                console.log(`対象の段落が見つかりました: ${paragraphText}`);
+                                await this.addCommentToParagraph(context, paragraph, evaluation);
+                                foundParagraph = true;
+                                break;
+                            }
+                        }
+
+                        if (!foundParagraph) {
+                            console.log(`対象の段落が見つかりませんでした: ${targetText}`);
                         }
                     }
                 }
 
                 await context.sync();
-                console.log("\nすべてのコメントを追加しました");
+                console.log("すべてのコメントを追加しました");
             });
         } catch (error) {
             console.error("コメント追加処理でエラーが発生:", error);
@@ -597,22 +576,140 @@ export class UIManager {
     }
 
     /**
-     * 評価が特定のパラグラフに関連しているかを判定
+     * 評価結果をカテゴリごとにグループ化
      */
-    private isEvaluationRelevantToParagraph(evaluation: EvaluationResult, paragraphText: string): boolean {
-        // 全体評価の場合は関連あり
-        if (evaluation.target_sentence === "全体" || 
-            evaluation.target_sentence === "本文全体" || 
-            evaluation.target_sentence === "タイトルおよびサマリー") {
+    private groupEvaluationsByCategory(evaluations: EvaluationResult[]): { [key: string]: EvaluationResult[] } {
+        return evaluations.reduce((groups, evaluation) => {
+            const category = evaluation.category;
+            if (!groups[category]) {
+                groups[category] = [];
+            }
+            groups[category].push(evaluation);
+            return groups;
+        }, {} as { [key: string]: EvaluationResult[] });
+    }
+
+    /**
+     * 段落にコメントを追加
+     */
+    private async addCommentToParagraph(context: Word.RequestContext, paragraph: Word.Paragraph, evaluation: EvaluationResult): Promise<void> {
+        try {
+            // コメントの内容を構築
+            let commentContent = `【${evaluation.category}】\n`;
+            
+            // 課題点セクション
+            if (evaluation.feedback && evaluation.feedback.length > 0) {
+                const validFeedback = evaluation.feedback.filter(f => !this.isPositiveFeedback(f));
+                if (validFeedback.length > 0) {
+                    commentContent += `\n【課題点】\n`;
+                    validFeedback.forEach(feedback => {
+                        commentContent += `・${feedback}\n`;
+                    });
+                }
+            }
+            
+            // 改善提案セクション
+            if (evaluation.improvement_suggestions && evaluation.improvement_suggestions.length > 0) {
+                commentContent += `\n【改善提案】\n`;
+                evaluation.improvement_suggestions.forEach(suggestion => {
+                    commentContent += `・${suggestion}\n`;
+                });
+            }
+
+            // コメントを追加
+            const range = paragraph.getRange();
+            await context.sync();
+            await range.insertComment(commentContent);
+            await context.sync();
+            console.log(`コメントを追加しました: ${commentContent}`);
+        } catch (commentError) {
+            console.error("コメント追加中にエラーが発生:", commentError);
+            throw commentError;
+        }
+    }
+
+    /**
+     * セクション識別子を解析する
+     */
+    private parseSectionIdentifier(text: string): { sectionType: string; targetText: string } {
+        const sectionMatch = text.match(/\[(サマリー|本文|全文|段落\d+)\]/);
+        if (sectionMatch) {
+            return {
+                sectionType: sectionMatch[1],
+                targetText: text.replace(/\[.*?\]/, '').trim()
+            };
+        }
+        return {
+            sectionType: '',
+            targetText: text.trim()
+        };
+    }
+
+    /**
+     * セクションタイプに基づいてマッチングを行う
+     */
+    private isMatchingSection(paragraphText: string, targetText: string, sectionType: string): boolean {
+        if (!targetText && !sectionType) return false;
+
+        // サマリーセクションの場合は最初の段落をマッチング
+        if (sectionType === 'サマリー' && paragraphText.includes('F社の物流機能')) {
             return true;
         }
 
-        // パラグラフのテキストと評価対象の文章を正規化して比較
-        const normalizedParagraph = paragraphText.replace(/[「」""]/g, "").trim();
-        const normalizedTarget = evaluation.target_sentence.replace(/[「」""]/g, "").trim();
+        // 正規化：空白を削除し、特殊文字を考慮
+        const normalizeText = (text: string): string => {
+            return text
+                .replace(/\s+/g, '')  // 空白を削除
+                .replace(/[「」""・]/g, '')  // 特殊文字を削除
+                .replace(/\(.*?\)/g, '')  // 括弧内の文字を削除
+                .replace(/（.*?）/g, '')  // 全角括弧内の文字を削除
+                .toLowerCase();  // 小文字に変換
+        };
 
-        return normalizedParagraph.includes(normalizedTarget) || 
-               normalizedTarget.includes(normalizedParagraph);
+        const normalizedParagraph = normalizeText(paragraphText);
+        const normalizedTarget = normalizeText(targetText);
+
+        // 完全一致または部分一致をチェック
+        return normalizedParagraph === normalizedTarget || 
+               normalizedParagraph.includes(normalizedTarget) ||
+               normalizedTarget.includes(normalizedParagraph) ||
+               this.calculateSimilarity(normalizedParagraph, normalizedTarget) > 0.8;
+    }
+
+    /**
+     * レーベンシュタイン距離を使用して文字列の類似度を計算
+     */
+    private calculateSimilarity(str1: string, str2: string): number {
+        const longer = str1.length > str2.length ? str1 : str2;
+        const shorter = str1.length > str2.length ? str2 : str1;
+        
+        if (longer.length === 0) {
+            return 1.0;
+        }
+        
+        const costs: number[] = [];
+        for (let i = 0; i <= shorter.length; i++) {
+            let lastValue = i;
+            for (let j = 0; j <= longer.length; j++) {
+                if (i === 0) {
+                    costs[j] = j;
+                } else {
+                    if (j > 0) {
+                        let newValue = costs[j - 1];
+                        if (shorter[i - 1] !== longer[j - 1]) {
+                            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+                        }
+                        costs[j - 1] = lastValue;
+                        lastValue = newValue;
+                    }
+                }
+            }
+            if (i > 0) {
+                costs[costs.length - 1] = lastValue;
+            }
+        }
+        
+        return (longer.length - costs[costs.length - 1]) / longer.length;
     }
 
     /**
@@ -631,56 +728,5 @@ export class UIManager {
 
         // ポジティブキーワードが含まれている場合は、ポジティブなフィードバック
         return positiveKeywords.some(keyword => feedback.includes(keyword));
-    }
-
-    /**
-     * 改善提案から課題点を推測する
-     */
-    private inferIssueFromSuggestion(suggestion: string): string {
-        // キーワードと課題点のマッピング
-        const issuePatterns = [
-            {
-                keywords: ["一貫", "統一"],
-                issue: "用語や表現の一貫性が不足しています"
-            },
-            {
-                keywords: ["具体的", "詳細"],
-                issue: "具体的な説明が不足しています"
-            },
-            {
-                keywords: ["明確"],
-                issue: "説明が不明確です"
-            },
-            {
-                keywords: ["追加", "補足"],
-                issue: "必要な情報が不足しています"
-            },
-            {
-                keywords: ["修正", "改善"],
-                issue: "表現が適切ではありません"
-            },
-            {
-                keywords: ["構成", "順序"],
-                issue: "文書の構成に問題があります"
-            },
-            {
-                keywords: ["簡潔"],
-                issue: "文章が冗長です"
-            },
-            {
-                keywords: ["説明"],
-                issue: "説明が不十分です"
-            }
-        ];
-
-        // 改善提案の内容に基づいて適切な課題点を選択
-        for (const pattern of issuePatterns) {
-            if (pattern.keywords.some(keyword => suggestion.includes(keyword))) {
-                return pattern.issue;
-            }
-        }
-
-        // デフォルトの課題点
-        return "記述に改善の余地があります";
     }
 } 
