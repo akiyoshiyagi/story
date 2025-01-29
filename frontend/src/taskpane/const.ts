@@ -62,8 +62,10 @@ export const SCORE_THRESHOLDS = {
 
 // 評価カテゴリのマッピング
 export const CATEGORY_ID_MAP: { [key: string]: string } = {
-    "文章の論理性": "logic",
-    "表現の適切さ": "expression",
-    "助詞の使用": "particles",
-    "文の構造": "structure"
+    "全文修辞表現": "full-text-rhetoric",
+    "サマリーの論理展開": "summary-logic-flow",
+    "サマリー単体の論理": "summary-internal-logic",
+    "サマリーとストーリー間の論理": "summary-story-logic",
+    "ストーリー単体の論理": "story-internal-logic",
+    "細部の修辞表現": "detail-rhetoric"
 }; 

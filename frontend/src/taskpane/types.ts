@@ -18,12 +18,10 @@ export interface StoryStructure {
 
 // 評価結果の型定義
 export interface EvaluationResult {
-    category: string;
-    score: number;
-    priority: number;  // 評価の優先度（1が最も高い）
-    target_sentence: string;
-    feedback: string[];
-    improvement_suggestions: string[];
+    target_sentence: string;  // 評価対象の文章
+    feedback: string[];      // 課題点
+    improvement_suggestions: string[];  // 改善提案
+    score: number;          // スコア（0-1の範囲）
 }
 
 // APIレスポンスの型定義
