@@ -7,8 +7,6 @@ export const API_BASE_URL = "http://127.0.0.1:8001";
 export const API_ENDPOINTS = {
     REVIEW: `${API_BASE_URL}/api/review`,
     HEALTH: `${API_BASE_URL}/api/health`,
-    EVALUATE: `${API_BASE_URL}/api/evaluate`,
-    CHECK_STATUS: `${API_BASE_URL}/api/status`,
     OPENAI: `${API_BASE_URL}/api/openai/evaluate`
 };
 

@@ -88,11 +88,6 @@ class ReviewManager:
         if not results:
             return 0
             
-        # 優先度の重みを考慮してスコアを計算
-        total_weight = sum(len(results) - r["priority"] + 1 for r in results)
-        weighted_score = sum(
-            (len(results) - r["priority"] + 1) * r["score"]
-            for r in results
-        )
-        
-        return round(weighted_score / total_weight) 
+        # 単純な平均値を計算
+        total_score = sum(r["score"] for r in results)
+        return round((total_score / len(results)) * 100) 

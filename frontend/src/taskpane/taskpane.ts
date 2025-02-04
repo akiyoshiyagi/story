@@ -5,36 +5,54 @@
 
 /* global console, document, Office */
 
-import { UIManager } from "./ui";
+import { UIManager } from "./uiManager";
 
-let isOfficeInitialized = false;
-const uiManager = new UIManager();
+// UIManagerのシングルトンインスタンス
+let uiManager: UIManager | null = null;
 
-Office.onReady(info => {
+Office.onReady((info) => {
     if (info.host === Office.HostType.Word) {
-        isOfficeInitialized = true;
-        document.getElementById("check-button").onclick = analyzeDocument;
+        // UIManagerのインスタンスを作成
+        uiManager = new UIManager();
+
+        // 実行ボタンのイベントハンドラを設定
+        const checkButton = document.getElementById("check-button");
+        if (checkButton) {
+            checkButton.onclick = handleCheckButtonClick;
+        }
+        
+        // グローバルエラーハンドリング
+        window.onerror = (message, source, lineno, colno, error) => {
+            console.error("Global error:", { message, source, lineno, colno, error });
+            if (uiManager) {
+                uiManager.showError("予期せぬエラーが発生しました");
+            }
+            return false;
+        };
+
+        window.onunhandledrejection = (event) => {
+            console.error("Unhandled promise rejection:", event.reason);
+            if (uiManager) {
+                uiManager.showError("非同期処理でエラーが発生しました");
+            }
+        };
     }
 });
 
-// 従来のOffice初期化ハンドラ（後方互換性のため残す）
-Office.initialize = () => {
-    isOfficeInitialized = true;
-};
-
 /**
- * 文書を解析して結果を表示する
+ * 実行ボタンのクリックハンドラ
  */
-async function analyzeDocument(): Promise<void> {
-    try {
-        if (!isOfficeInitialized) {
-            throw new Error("Office.jsが初期化されていません");
-        }
+async function handleCheckButtonClick(): Promise<void> {
+    if (!uiManager) {
+        console.error("UIManagerが初期化されていません");
+        return;
+    }
 
+    try {
         await uiManager.handleCheckDocument();
     } catch (error) {
         console.error("文書解析中にエラーが発生:", error);
-        uiManager.displayError(error instanceof Error ? error.message : "不明なエラーが発生しました");
+        uiManager.showError(error instanceof Error ? error.message : "予期せぬエラーが発生しました");
     }
 }
 

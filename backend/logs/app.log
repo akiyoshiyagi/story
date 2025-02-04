@@ -1,0 +1,6 @@
+{"timestamp": "2025-02-03T03:50:27.704023", "level": "INFO", "message": "Request: GET /api/health", "module": "main", "function": "log_requests", "line": 117}
+{"timestamp": "2025-02-03T03:50:27.705954", "level": "INFO", "message": "Response: 404", "module": "main", "function": "log_requests", "line": 120}
+{"timestamp": "2025-02-03T03:50:35.974823", "level": "INFO", "message": "Request: GET /api/health", "module": "main", "function": "log_requests", "line": 117}
+{"timestamp": "2025-02-03T03:50:35.976934", "level": "INFO", "message": "Response: 404", "module": "main", "function": "log_requests", "line": 120}
+{"timestamp": "2025-02-03T03:50:41.252104", "level": "INFO", "message": "Request: GET /api/health", "module": "main", "function": "log_requests", "line": 117}
+{"timestamp": "2025-02-03T03:50:41.253813", "level": "INFO", "message": "Response: 404", "module": "main", "function": "log_requests", "line": 120}

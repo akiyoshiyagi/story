@@ -24,30 +24,32 @@ interface OpenAIRequest {
 // 共通のフェッチオプション
 const fetchOptions = {
     mode: 'cors' as RequestMode,
+    credentials: 'include' as RequestCredentials,
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
     },
-    credentials: 'include' as RequestCredentials,
-};
+}
 
 // 開発環境用のフェッチオプション
 const devFetchOptions = {
     ...fetchOptions,
-    headers: {
-        ...fetchOptions.headers,
-        'Origin': 'https://localhost:3001',
-    }
-};
+    method: 'GET',
+}
 
 /**
  * 文書を評価するAPIを呼び出す
  */
 export async function reviewDocument(document: DocumentStructure): Promise<ReviewResponse> {
     try {
+        // 入力値の検証を追加
+        if (!document || !document.contents || document.contents.length === 0) {
+            throw new Error("文書の内容が空です");
+        }
+
         // 文書構造をAPIリクエスト形式に変換
         const requestData: ReviewRequest = {
-            title: document.title,
+            title: document.title || "無題",
             full_text: document.contents.map(group => 
                 `${group.summary}\n${group.stories.map(story => 
                     `${story.story}\n${story.bodies.join('\n')}`
@@ -60,7 +62,7 @@ export async function reviewDocument(document: DocumentStructure): Promise<Revie
                     story.story,
                     ...story.bodies
                 ])
-            ])
+            ]).filter(text => text && text.trim().length > 0) // 空の段落を除外
         };
 
         console.log('Sending request to API:', {
@@ -80,10 +82,21 @@ export async function reviewDocument(document: DocumentStructure): Promise<Revie
         if (!response.ok) {
             const errorText = await response.text();
             console.error('API error response:', errorText);
-            throw new Error(`API error: ${response.status}`);
+            let errorMessage = `API error: ${response.status}`;
+            try {
+                const errorJson = JSON.parse(errorText);
+                errorMessage = errorJson.detail || errorJson.message || errorMessage;
+            } catch (e) {
+                // JSONパースに失敗した場合は元のエラーテキストを使用
+            }
+            throw new Error(errorMessage);
         }
 
         const result = await response.json();
+        if (!result || !result.evaluations) {
+            throw new Error("評価結果のフォーマットが不正です");
+        }
+        
         console.log('API response:', result);
         return result;
     } catch (error) {

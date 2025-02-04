@@ -2,6 +2,7 @@
 FastAPIメインアプリケーション
 """
 import logging
+import sys
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,10 +10,31 @@ from pydantic import BaseModel
 from .services.evaluation_service import EvaluationService
 from .services.openai_service import evaluate_document as openai_evaluate
 from .config import get_settings
+from . import routes
 
-# ロギングの設定
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+# ロギング設定
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+# ルートロガーの設定
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+# 既存のハンドラをクリア
+for handler in logger.handlers[:]:
+    logger.removeHandler(handler)
+
+# 新しいハンドラを追加
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 app = FastAPI()
 settings = get_settings()
@@ -20,25 +42,14 @@ settings = get_settings()
 # CORSミドルウェアの設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://localhost:3001",  # Office Add-inのオリジン
-        "http://localhost:3001",   # 開発環境用
-    ],
+    allow_origins=["https://localhost:3001"],  # ワイルドカード * から特定のオリジンに変更
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=[
-        "Content-Type",
-        "Accept",
-        "Authorization",
-        "X-Requested-With",
-        "Access-Control-Allow-Origin",
-        "Access-Control-Allow-Methods",
-        "Access-Control-Allow-Headers",
-        "Access-Control-Allow-Credentials"
-    ],
-    expose_headers=["*"],
-    max_age=3600,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+# ルーターの登録
+app.include_router(routes.router)
 
 class DocumentRequest(BaseModel):
     title: str

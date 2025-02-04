@@ -1,22 +1,36 @@
-from typing import List
+"""
+評価結果を表現するモデル
+"""
 from pydantic import BaseModel
 
 class EvaluationResult(BaseModel):
-    """文書評価の結果を表すデータクラス"""
-    category: str
+    """評価結果モデル"""
+    criteria_id: str
     score: float
-    priority: int
-    target_sentence: str
-    feedback: List[str]
-    improvement_suggestions: List[str]
+    feedback: str
+    category: str
 
     def to_dict(self) -> dict:
-        """辞書形式に変換"""
+        """
+        評価結果を辞書形式に変換
+        
+        Returns:
+            dict: 評価結果の辞書表現
+        """
         return {
-            'category': self.category,
-            'score': self.score,
-            'priority': self.priority,
-            'target_sentence': self.target_sentence,
-            'feedback': self.feedback,
-            'improvement_suggestions': self.improvement_suggestions
+            "criteria_id": self.criteria_id,
+            "score": self.score,
+            "feedback": self.feedback,
+            "category": self.category
+        }
+
+    class Config:
+        """設定クラス"""
+        json_schema_extra = {
+            "example": {
+                "criteria_id": "前回討議振り返り評価",
+                "score": 0.8,
+                "feedback": "前回討議の振り返りが不十分です。",
+                "category": "SUMMARY_ONLY"
+            }
         } 

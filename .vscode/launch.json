@@ -1,0 +1,27 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: FastAPI",
+            "type": "python",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "app.main:app",
+                "--reload",
+                "--port",
+                "8001",
+                "--log-level",
+                "debug"
+            ],
+            "jinja": true,
+            "justMyCode": true,
+            "console": "internalConsole",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend",
+                "LOG_LEVEL": "DEBUG",
+                "PYTHONUNBUFFERED": "1"
+            }
+        }
+    ]
+} 

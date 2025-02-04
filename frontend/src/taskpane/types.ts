@@ -17,15 +17,33 @@ export interface StoryStructure {
 }
 
 // 評価結果の型定義
-export interface EvaluationResult {
-    target_sentence: string;  // 評価対象の文章
-    feedback: string[];      // 課題点
-    improvement_suggestions: string[];  // 改善提案
-    score: number;          // スコア（0-1の範囲）
+export interface Evaluation {
+    categoryId: string;
+    criteriaId: string;
+    score: number;
+    feedback: string;
+    location: string;
+}
+
+export interface Category {
+    id: string;
+    name: string;
+    priority: number;
+}
+
+export interface CategoryScore {
+    categoryId: string;
+    categoryName: string;
+    score: number;
+    judgment: "OK" | "NG";
 }
 
 // APIレスポンスの型定義
 export interface ReviewResponse {
-    total_score: number;
-    evaluations: EvaluationResult[];
+    evaluations: Evaluation[];
+    categories: Category[];
+    categoryScores: CategoryScore[];
+    totalScore: number;
+    totalJudgment: "OK" | "NG";
+    error?: string;
 } 

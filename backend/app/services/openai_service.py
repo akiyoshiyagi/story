@@ -132,10 +132,6 @@ def calculate_total_score(evaluations: List[EvaluationResult]) -> float:
     if not evaluations:
         return 0.0
         
-    # 優先度に基づいて重み付けを行う
-    weights = {1: 1.0, 2: 0.7, 3: 0.3}  # 優先度ごとの重み
-    
-    weighted_sum = sum(eval.score * weights.get(eval.priority, 0.5) for eval in evaluations)
-    total_weight = sum(weights.get(eval.priority, 0.5) for eval in evaluations)
-    
-    return weighted_sum / total_weight if total_weight > 0 else 0.0 
+    # 単純な平均値を計算
+    total_score = sum(eval.score for eval in evaluations)
+    return total_score / len(evaluations) if evaluations else 0.0 
