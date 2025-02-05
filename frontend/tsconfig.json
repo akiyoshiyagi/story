@@ -8,7 +8,11 @@
     "noEmitOnError": true,
     "outDir": "lib",
     "sourceMap": true,
-    "target": "es5",
+    "target": "es2015",
+    "module": "commonjs",
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
     "lib": [
       "es2015",
       "dom"

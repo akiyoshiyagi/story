@@ -120,6 +120,8 @@ li {
 }
 
 .evaluation-header {
+    cursor: pointer;
+    transition: background-color 0.3s ease;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -130,6 +132,11 @@ li {
 
 .evaluation-header:hover {
     background-color: #f0f0f0;
+}
+
+.evaluation-header.active {
+    background-color: #e6f3ff;
+    border-left: 3px solid #0078d4;
 }
 
 .evaluation-header .expand-icon {

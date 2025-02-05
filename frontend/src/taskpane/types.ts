@@ -2,6 +2,56 @@
  * 共通の型定義
  */
 
+declare namespace Word {
+    interface Document {
+        comments: CommentCollection;
+        contentControls: ContentControlCollection;
+    }
+
+    interface CommentCollection {
+        items: Comment[];
+        load(properties: string): void;
+    }
+
+    interface Comment {
+        delete(): void;
+        text: string;
+    }
+
+    interface Range {
+        getUniqueId(): string;
+        insertComment(text: string): Comment;
+        text: string;
+        insertContentControl(): ContentControl;
+    }
+
+    interface Paragraph {
+        getRange(): Range;
+        firstLineIndent: number;
+        leftIndent: number;
+        text: string;
+    }
+
+    interface ContentControlCollection {
+        items: ContentControl[];
+        load(propertyNames?: string): void;
+    }
+
+    interface ContentControl {
+        title: string;
+        delete(): void;
+        insertText(text: string, location: InsertLocation): void;
+    }
+
+    enum InsertLocation {
+        before = "Before",
+        after = "After",
+        start = "Start",
+        end = "End",
+        replace = "Replace"
+    }
+}
+
 // 文書構造の型定義
 export interface DocumentStructure {
     title: string;  // ドキュメント全体のタイトル
