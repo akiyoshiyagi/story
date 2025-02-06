@@ -1,8 +1,11 @@
 import requests
 import json
 from app.config import get_settings
+from fastapi.testclient import TestClient
+from app.main import app
 
 settings = get_settings()
+client = TestClient(app)
 
 def test_health():
     """ヘルスチェックエンドポイントのテスト"""
@@ -125,6 +128,50 @@ def test_document_review_complex():
         if hasattr(response, 'text'):
             print(f"レスポンステキスト: {response.text}")
 
+def test_evaluation_targets():
+    """評価対象範囲のテキストを確認するテスト"""
+    print("\n=== 評価対象範囲のテキスト確認 ===")
+    
+    # テスト用の文書構造
+    document = {
+        "title": "評価対象範囲テスト",
+        "full_text": "これは文書全体です。\nサマリー、ストーリー、本文を含みます。",
+        "summary": "これはサマリーです。\n重要なポイントをまとめています。",
+        "story": "これはストーリーの1段落目です。\n\nこれはストーリーの2段落目です。",
+        "paragraphs": [
+            "これはストーリーの1段落目です。",
+            "これはストーリーの2段落目です。",
+            "これは本文の段落です。"
+        ]
+    }
+
+    # 評価対象範囲ごとのテキスト取得
+    from app.prompt_template.prompt import get_evaluation_text
+    
+    print("\n1. FULL_DOCUMENT:")
+    print(get_evaluation_text(document, ["FULL_DOCUMENT"]))
+    
+    print("\n2. SUMMARY_ONLY:")
+    print(get_evaluation_text(document, ["SUMMARY_ONLY"]))
+    
+    print("\n3. SUMMARY_AND_STORY:")
+    print(get_evaluation_text(document, ["SUMMARY_AND_STORY"]))
+    
+    print("\n4. STORY_AND_BODY:")
+    print(get_evaluation_text(document, ["STORY_AND_BODY"]))
+
+def test_review_endpoint():
+    response = client.post("/api/review", json=test_data)
+    print("\n=== APIレスポンス ===")
+    print(f"ステータスコード: {response.status_code}")
+    
+    if response.status_code == 200:
+        result = response.json()
+        print("\n=== 評価結果 ===")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"エラー: {response.text}")
+
 if __name__ == "__main__":
     # ヘルスチェック
     test_health()
@@ -135,6 +182,9 @@ if __name__ == "__main__":
     print(f"SUB API URL: {settings.OPENAI_API_BASE_URL}")
     print(f"SUB Model: {settings.OPENAI_API_LLM_MODEL_NAME}")
     
+    # 評価対象範囲のテスト
+    test_evaluation_targets()
+    
     # OpenAI APIテスト
     test_openai_lite()
     test_openai_sub()
@@ -143,4 +193,7 @@ if __name__ == "__main__":
     test_document_review()
     
     # 文書評価テスト（複雑ケース）
-    test_document_review_complex() 
+    test_document_review_complex()
+    
+    # レビューエンドポイントのテスト
+    test_review_endpoint() 

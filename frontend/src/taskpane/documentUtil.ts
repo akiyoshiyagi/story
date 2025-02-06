@@ -32,168 +32,168 @@ export async function getDocumentStructure(): Promise<DocumentStructure> {
 
             // 文書全体のパラグラフを取得
             const paragraphs = context.document.body.paragraphs;
-            paragraphs.load("items");
+            paragraphs.load(["items", "text", "listItem", "listItem/level"]);
             await context.sync();
 
-            // 各パラグラフのテキストを読み込む
-            const paragraphItems = paragraphs.items;
-            for (const paragraph of paragraphItems) {
-                paragraph.load(["text", "firstLineIndent", "leftIndent"]);
-            }
-            await context.sync();
-
-            // 現在処理中の各レベルの内容を保持
-            let currentSummary = '';
-            let currentStoryGroup: Array<{
-                story: string;
-                bodies: string[];
-            }> = [];
-            let currentStory = '';
-            let currentBodies: string[] = [];
+            // デバッグ情報の出力
+            console.log('=== 文書構造解析開始 ===');
+            console.log(`総段落数: ${paragraphs.items.length}`);
 
             // 結果を格納する配列
             const contents: StoryStructure[] = [];
-
-            // 文書が空の場合のデフォルト値を設定
-            if (paragraphItems.length === 0) {
-                return {
-                    title,
-                    contents: [{
-                        summary: "空の文書",
-                        stories: [{
-                            story: "内容なし",
-                            bodies: ["テキストを入力してください"]
-                        }]
-                    }]
-                };
-            }
+            let currentStructure: StoryStructure | null = null;
+            let currentStory: { story: string; bodies: string[] } | null = null;
 
             // 各パラグラフを処理
-            for (const paragraph of paragraphItems) {
-                const text = paragraph.text;
-                const trimmedText = text.trim();
-                
-                // 空のパラグラフはスキップ
-                if (!trimmedText) continue;
+            const structuredContents: {
+                level: number;
+                text: string;
+                listLevel: number;
+            }[] = [];
 
-                // インデントレベルを計算
-                const firstLineIndent = paragraph.firstLineIndent || 0;
-                const leftIndent = paragraph.leftIndent || 0;
-                const totalIndent = leftIndent + firstLineIndent;
-                const indentLevel = getIndentLevel(totalIndent);
+            // パラグラフのレベルを判定
+            for (const paragraph of paragraphs.items) {
+                const text = paragraph.text.trim();
+                if (!text) continue;
 
-                // デバッグ情報を出力
-                console.log(`=== パラグラフ解析 ===`);
-                console.log(`テキスト: ${trimmedText}`);
-                console.log(`インデント情報:`, {
-                    firstLineIndent,
-                    leftIndent,
-                    totalIndent,
-                    indentLevel
-                });
-
-                // インデントレベルが0（対象外）の場合はスキップ
-                if (indentLevel === 0) {
-                    console.log('インデントレベルが0のためスキップ');
-                    continue;
-                }
-
-                // レベルに応じて処理
-                if (indentLevel === 1) {
-                    console.log('サマリーとして処理:', trimmedText);
-                    // 前のグループを保存
-                    if (currentSummary) {
-                        // 前のストーリーグループを保存
-                        if (currentStory) {
-                            currentStoryGroup.push({
-                                story: currentStory,
-                                bodies: [...currentBodies]
-                            });
-                        }
-
-                        if (currentStoryGroup.length === 0) {
-                            currentStoryGroup.push({
-                                story: "内容なし",
-                                bodies: ["テキストを入力してください"]
-                            });
-                        }
-
-                        contents.push({
-                            summary: currentSummary,
-                            stories: [...currentStoryGroup]
+                // リストレベルを取得（箇条書きレベル）
+                let listLevel = 0;
+                try {
+                    if (paragraph.listItem) {
+                        listLevel = paragraph.listItem.level + 1;
+                        console.log('リストレベルを検出:', {
+                            text: text.substring(0, 50),
+                            level: listLevel
                         });
                     }
-
-                    // 新しいグループを開始
-                    currentSummary = trimmedText;
-                    currentStoryGroup = [];
-                    currentStory = '';
-                    currentBodies = [];
-                }
-                else if (indentLevel === 2) {
-                    console.log('ストーリーとして処理:', trimmedText);
-                    // 前のストーリーグループを保存
-                    if (currentStory) {
-                        currentStoryGroup.push({
-                            story: currentStory,
-                            bodies: [...currentBodies]
-                        });
-                    }
-
-                    // 新しいストーリーを開始
-                    currentStory = trimmedText;
-                    currentBodies = [];
-                }
-                else if (indentLevel === 3) {
-                    console.log('詳細として処理:', trimmedText);
-                    currentBodies.push(trimmedText);
-                }
-            }
-
-            // 最後のグループを処理
-            if (currentSummary) {
-                // 最後のストーリーグループを保存
-                if (currentStory) {
-                    currentStoryGroup.push({
-                        story: currentStory,
-                        bodies: [...currentBodies]
+                } catch (error) {
+                    console.warn('リストレベルの取得に失敗:', {
+                        text: text.substring(0, 50),
+                        error: error instanceof Error ? error.message : String(error)
                     });
                 }
 
-                if (currentStoryGroup.length === 0) {
-                    currentStoryGroup.push({
-                        story: "内容なし",
-                        bodies: ["テキストを入力してください"]
-                    });
+                // 箇条書きレベルに基づいてドキュメントレベルを設定
+                let level: number;
+                if (listLevel === 1) {
+                    level = 1; // サマリー
+                } else if (listLevel === 2) {
+                    level = 2; // ストーリー
+                } else if (listLevel === 3) {
+                    level = 3; // 本文
+                } else {
+                    // リストレベルが0または不明な場合
+                    if (structuredContents.length === 0) {
+                        level = 1; // 最初の段落はサマリーとして扱う
+                        console.log('最初の段落をサマリーとして設定:', text.substring(0, 50));
+                    } else if (!currentStructure) {
+                        level = 1; // サマリーがない場合は新しいサマリーとして扱う
+                        console.log('サマリーが未設定のため、新しいサマリーとして設定:', text.substring(0, 50));
+                    } else if (!currentStory) {
+                        level = 2; // ストーリーがない場合は新しいストーリーとして扱う
+                        console.log('ストーリーが未設定のため、新しいストーリーとして設定:', text.substring(0, 50));
+                    } else {
+                        level = 3; // それ以外は本文として扱う
+                        console.log('本文として設定:', text.substring(0, 50));
+                    }
                 }
 
-                contents.push({
-                    summary: currentSummary,
-                    stories: [...currentStoryGroup]
+                console.log('段落解析:', {
+                    text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+                    listLevel,
+                    level: `${level} (${getLevelName(level)})`,
+                    isFirstParagraph: structuredContents.length === 0
                 });
+
+                structuredContents.push({
+                    level,
+                    text,
+                    listLevel
+                });
+
+                // 文書構造を更新
+                if (level === 1) {
+                    // サマリーの場合：新しい構造を開始
+                    if (currentStructure) {
+                        console.log('既存の構造を保存:', {
+                            summary: currentStructure.summary.substring(0, 50),
+                            storiesCount: currentStructure.stories.length
+                        });
+                        contents.push(currentStructure);
+                    }
+                    currentStructure = {
+                        summary: text,
+                        stories: []
+                    };
+                    currentStory = null;
+                    console.log('新しいサマリーを作成:', text.substring(0, 50));
+
+                } else if (level === 2) {
+                    // ストーリーの場合：現在のサマリーに紐づけて新しいストーリーを開始
+                    if (!currentStructure) {
+                        console.log('サマリーが未設定のためストーリー用の構造を作成');
+                        currentStructure = {
+                            summary: "要約なし",
+                            stories: []
+                        };
+                    }
+                    currentStory = {
+                        story: paragraph.text,
+                        bodies: []
+                    };
+                    currentStructure.stories.push(currentStory);
+                    console.log('ストーリーを追加:', paragraph.text.substring(0, 50));
+
+                } else if (level === 3) {
+                    // 本文の場合：現在のストーリーに紐づけて本文を追加
+                    if (!currentStructure) {
+                        console.log('サマリーが未設定のため本文用の構造を作成');
+                        currentStructure = {
+                            summary: "要約なし",
+                            stories: []
+                        };
+                    }
+                    if (!currentStory) {
+                        console.log('ストーリーが未設定のため新しいストーリーを作成');
+                        currentStory = {
+                            story: "内容なし",
+                            bodies: []
+                        };
+                        currentStructure.stories.push(currentStory);
+                    }
+                    currentStory.bodies.push(paragraph.text);
+                    console.log('本文を追加:', paragraph.text.substring(0, 50));
+                }
             }
 
-            // 結果が空の場合のデフォルト値を設定
-            if (contents.length === 0) {
-                contents.push({
-                    summary: "要約なし",
-                    stories: [{
-                        story: "内容なし",
-                        bodies: ["テキストを入力してください"]
-                    }]
-                });
-            }
+            // 最終結果のサマリーを出力
+            console.log('\n=== 文書構造の解析結果 ===');
+            const levelCounts = structuredContents.reduce((acc, curr) => {
+                acc[curr.level] = (acc[curr.level] || 0) + 1;
+                return acc;
+            }, {} as Record<number, number>);
 
-            // デバッグ用のログ出力
-            console.log('\n=== 解析結果 ===');
-            console.log(`タイトル: ${title}`);
-            contents.forEach((group, index) => {
-                console.log(`[${group.summary}, [${
-                    group.stories.map(story => 
-                        `[${story.story}, [${story.bodies.join(', ')}]]`
-                    ).join(', ')
-                }]]`);
+            console.log('段落の分類結果:', {
+                'サマリー (Level 1)': levelCounts[1] || 0,
+                'ストーリー (Level 2)': levelCounts[2] || 0,
+                '本文 (Level 3)': levelCounts[3] || 0,
+                '詳細 (Level 4)': levelCounts[4] || 0
             });
+
+            // 最後の構造を追加
+            if (currentStructure) {
+                console.log('最後の構造を保存:', {
+                    summary: currentStructure.summary.substring(0, 50),
+                    storiesCount: currentStructure.stories.length
+                });
+                contents.push(currentStructure);
+            }
+
+            console.log('作成された構造:', contents.map(content => ({
+                summary: content.summary.substring(0, 50),
+                storiesCount: content.stories.length,
+                totalBodies: content.stories.reduce((sum, story) => sum + story.bodies.length, 0)
+            })));
 
             return {
                 title,
@@ -207,42 +207,15 @@ export async function getDocumentStructure(): Promise<DocumentStructure> {
 }
 
 /**
- * 箇条書きの段落を取得する
- * @returns 箇条書きの段落のテキスト配列
+ * レベル名を取得
  */
-export async function getBulletPoints(): Promise<string[]> {
-    try {
-        return await Word.run(async (context) => {
-            const body = context.document.body;
-            const paragraphs = body.paragraphs;
-            paragraphs.load("items");
-            await context.sync();
-
-            const bulletPoints: string[] = [];
-            
-            // 各パラグラフのテキストを読み込む
-            const paragraphItems = paragraphs.items;
-            for (let i = 0; i < paragraphItems.length; i++) {
-                const paragraph = paragraphItems[i];
-                paragraph.load(["text", "firstLineIndent", "leftIndent"]);
-            }
-            await context.sync();
-
-            // 各段落を処理
-            for (let i = 0; i < paragraphItems.length; i++) {
-                const paragraph = paragraphItems[i];
-                const text = paragraph.text.trim();
-                // 箇条書きの記号で始まるテキストを検出
-                if (text.match(/^[・※\-\*•]/) || text.match(/^\d+[\.\)]/) || text.startsWith("• ")) {
-                    bulletPoints.push(text);
-                }
-            }
-
-            return bulletPoints;
-        });
-    } catch (error) {
-        console.error("Error fetching bullet points:", error);
-        throw error;
+function getLevelName(level: number): string {
+    switch (level) {
+        case 1: return 'サマリー';
+        case 2: return 'ストーリー';
+        case 3: return '本文';
+        case 4: return '詳細';
+        default: return '不明';
     }
 }
 
@@ -262,37 +235,4 @@ export async function getFullText(): Promise<string> {
         console.error("Error in getFullText:", error);
         throw error;
     }
-}
-
-/**
- * インデントレベルを判定する
- * @param indent インデント値（ポイント単位）
- * @returns インデントレベル（1-3）、対象外の場合は0
- */
-function getIndentLevel(indent: number): number {
-    // 実際の値に基づいてレベルを判定
-    if (indent <= 0) return 1;    // グループ1: totalIndent = 0
-    if (indent <= 30) return 2;   // グループ2: totalIndent ≈ 21
-    if (indent <= 50) return 3;   // グループ3: totalIndent ≈ 42
-    return 0;                     // 対象外
-}
-
-/**
- * Summaryの見出しかどうかを判定
- */
-function isSummaryHeading(text: string): boolean {
-    const keywords = ['summary', '要約', 'サマリー'];
-    return keywords.some(keyword => 
-        text.toLowerCase().includes(keyword.toLowerCase())
-    );
-}
-
-/**
- * Storyの見出しかどうかを判定
- */
-function isStoryHeading(text: string): boolean {
-    const keywords = ['story', 'ストーリー', '物語'];
-    return keywords.some(keyword => 
-        text.toLowerCase().includes(keyword.toLowerCase())
-    );
 }

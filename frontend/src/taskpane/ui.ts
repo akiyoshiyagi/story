@@ -263,23 +263,41 @@ export class UIManager {
      * カテゴリIDを評価基準IDから取得
      */
     private getCategoryIdFromCriteria(criteriaId: string): string {
+        // カテゴリIDとcriteriaIdの対応関係を定義
         const categoryMapping: { [key: string]: string } = {
-            'サマリとストーリーの日本語評価': 'full-text-rhetoric',
-            '転換の接続詞チェック': 'full-text-rhetoric',
-            '前回討議振り返り評価': 'summary-logic-flow',
-            'SCQA': 'summary-logic-flow',
-            '接続詞と内容の一致': 'summary-internal-logic',
-            '不適切な接続詞': 'summary-internal-logic',
-            '論理的連続性': 'summary-internal-logic',
-            'ストーリーの逐次的展開の評価': 'summary-story-logic',
-            '逐次的展開': 'summary-story-logic',
-            '根拠s, 詳細s⇒主張': 'summary-story-logic',
-            '接続詞の適切性': 'story-internal-logic',
-            '転換接続詞の重複利用': 'story-internal-logic',
-            '無駄なナンバリングの評価': 'story-internal-logic',
-            '修辞評価': 'detail-rhetoric'
+            // 文章表現（全文の修辞）
+            'RHETORIC_EVALUATION': 'full-text-rhetoric',
+            'TRANSITION_WORD_CHECK': 'full-text-rhetoric',
+            'JAPANESE_EVALUATION': 'full-text-rhetoric',
+
+            // 論理展開（サマリーの論理展開）
+            'PREVIOUS_DISCUSSION': 'summary-logic-flow',
+            'SCQA_EVALUATION': 'summary-logic-flow',
+            'LOGIC_FLOW': 'summary-logic-flow',
+
+            // 整合性（サマリーの内部整合性）
+            'CONJUNCTION_MATCH': 'summary-internal-logic',
+            'INAPPROPRIATE_CONJUNCTION': 'summary-internal-logic',
+            'LOGICAL_CONSISTENCY': 'summary-internal-logic',
+
+            // 関連性（サマリーとストーリーの関連性）
+            'STORY_DEVELOPMENT': 'summary-story-logic',
+            'SEQUENTIAL_DEVELOPMENT': 'summary-story-logic',
+            'EVIDENCE_TO_CLAIM': 'summary-story-logic',
+
+            // ストーリー（ストーリーの論理性）
+            'CONJUNCTION_APPROPRIATENESS': 'story-internal-logic',
+            'TRANSITION_WORD_DUPLICATION': 'story-internal-logic',
+            'UNNECESSARY_NUMBERING': 'story-internal-logic',
+
+            // 細部表現
+            'DETAIL_RHETORIC': 'detail-rhetoric',
+            'WORD_USAGE': 'detail-rhetoric',
+            'STYLE_CONSISTENCY': 'detail-rhetoric'
         };
-        return categoryMapping[criteriaId] || '';
+
+        // マッピングに存在しない場合はデフォルトのカテゴリを返す
+        return categoryMapping[criteriaId] || 'full-text-rhetoric';
     }
 
     /**
@@ -313,147 +331,36 @@ export class UIManager {
      */
     async displayEvaluations(evaluations: EvaluationResult[]): Promise<void> {
         try {
+            console.log("評価結果の表示を開始:", evaluations);
+            
             // カテゴリごとにコメントを分類
             this.categoryComments.clear();
             evaluations.forEach(evaluation => {
                 const categoryId = this.getCategoryIdFromCriteria(evaluation.criteriaId);
-                if (categoryId) {
-                    if (!this.categoryComments.has(categoryId)) {
-                        this.categoryComments.set(categoryId, []);
-                    }
-                    this.categoryComments.get(categoryId)?.push(evaluation);
-                }
-            });
-
-            // アクティブなカテゴリがある場合は、そのカテゴリのコメントを表示
-            if (this.activeCategory) {
-                const comments = this.categoryComments.get(this.activeCategory) || [];
-                await this.addCommentsToDocument(comments);
-            }
-
-            // 初期状態にリセット
-            this.resetEvaluations();
-            
-            console.log("=== 評価プロセス開始 ===");
-            console.log("1. 受け取った評価結果:", evaluations);
-            console.log("評価結果の数:", evaluations.length);
-            
-            // 評価結果の優先度分布を表示
-            const priorityDistribution = evaluations.reduce((acc, curr) => {
-                acc[curr.priority] = (acc[curr.priority] || 0) + 1;
-                return acc;
-            }, {} as { [key: number]: number });
-            console.log("優先度の分布:", priorityDistribution);
-            
-            // 評価結果の詳細をログ出力
-            evaluations.forEach((evaluation, index) => {
-                console.log(`\n評価 ${index + 1} の詳細:`);
-                console.log(`- カテゴリ: ${evaluation.category}`);
-                console.log(`- Priority: ${evaluation.priority}`);
-                console.log(`- 適用範囲: ${evaluation.applicable_to?.join(', ')}`);
-                console.log(`- スコア: ${evaluation.score}`);
-                console.log(`- 対象文: ${evaluation.target_sentence}`);
-                console.log(`- フィードバック: ${evaluation.feedback?.join('\n  ')}`);
-                console.log(`- 改善提案: ${evaluation.improvement_suggestions?.join('\n  ')}`);
-            });
-
-            // 最も優先度の高い課題のある評価のみをフィルタリング
-            console.log("\n2. 優先度に基づくフィルタリングを開始");
-            const highestPriorityNegativeEvaluations = this.filterHighestPriorityNegativeEvaluations(evaluations);
-            console.log("フィルタリング後の評価数:", highestPriorityNegativeEvaluations.length);
-
-            // フィルタリング後の優先度分布を表示
-            const filteredPriorityDistribution = highestPriorityNegativeEvaluations.reduce((acc, curr) => {
-                acc[curr.priority] = (acc[curr.priority] || 0) + 1;
-                return acc;
-            }, {} as { [key: number]: number });
-            console.log("フィルタリング後の優先度分布:", filteredPriorityDistribution);
-
-            // 評価内容を表示
-            const contentElement = document.getElementById("evaluation-content");
-            if (contentElement) {
-                // 課題のある評価が見つからない場合
-                if (highestPriorityNegativeEvaluations.length === 0) {
-                    console.log("\n3. 課題のある評価が見つかりませんでした");
-                    contentElement.innerHTML = '<div class="feedback-section"><div class="no-issues">課題は見つかりませんでした。</div></div>';
-                    return;
-                }
-
-                console.log("\n3. UIへの評価結果の表示を開始");
-                    let content = '<div class="feedback-section">';
+                console.log(`評価 "${evaluation.criteriaId}" をカテゴリ "${categoryId}" に分類`);
                 
-                // 全体のスコアを計算（平均値）
-                const averageScore = highestPriorityNegativeEvaluations.reduce((sum, evaluation) => sum + evaluation.score, 0) / highestPriorityNegativeEvaluations.length;
-                const score100 = Math.round(averageScore * 100);
-                console.log("計算されたスコア:", score100);
-
-                // スコアの表示
-                content += `<div class="score-detail" role="region" aria-label="スコア詳細">
-                    <div class="score-bar-container">
-                        <div class="score-bar" style="width: ${score100}%" role="progressbar" aria-valuenow="${score100}" aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                    <div class="score-value">${score100}点</div>
-                </div>`;
-
-                // 評価結果をスコアの低い順にソート
-                const sortedEvaluations = [...highestPriorityNegativeEvaluations].sort((a, b) => a.score - b.score);
-
-                // 各評価の表示
-                sortedEvaluations.forEach(evaluation => {
-                    content += '<div class="evaluation-item">';
-                    
-                    // 対象文章
-                    content += `<div class="target-sentence">${evaluation.target_sentence}</div>`;
-                    
-                    // フィードバックを表示
-                    if (evaluation.feedback && evaluation.feedback.length > 0) {
-                        content += '<div class="feedback-points" role="list" aria-label="評価ポイント">';
-                        content += '<h4>課題点</h4>';
-                        content += '<ul>';
-                        evaluation.feedback
-                            .filter(f => !this.isPositiveFeedback(f))
-                            .forEach(feedback => {
-                                content += `<li class="negative" role="listitem">${feedback}</li>`;
-                        });
-                        content += '</ul></div>';
-                    }
-
-                    // 改善提案を表示
-                    if (evaluation.improvement_suggestions && evaluation.improvement_suggestions.length > 0) {
-                        content += '<div class="suggestions" role="list" aria-label="改善提案">';
-                        content += '<h4>改善提案</h4>';
-                        content += '<ul>';
-                        evaluation.improvement_suggestions.forEach(suggestion => {
-                            content += `<li class="suggestion-item" role="listitem">${suggestion}</li>`;
-                        });
-                        content += '</ul></div>';
-                    }
-
-                    content += '</div>';
-                });
-
-                    content += '</div>';
-                    contentElement.innerHTML = content;
-
-                    // アニメーション効果を追加
-                    contentElement.classList.add('fade-in');
-                    setTimeout(() => {
-                        contentElement.classList.remove('fade-in');
-                    }, 500);
+                if (!this.categoryComments.has(categoryId)) {
+                    this.categoryComments.set(categoryId, []);
                 }
+                this.categoryComments.get(categoryId)?.push(evaluation);
+            });
 
-            // Word文書にコメントを追加
-            console.log("\n4. Word文書へのコメント追加を開始");
-            try {
-                await this.addCommentsToDocument(evaluations);
-            } catch (error) {
-                console.error("Error adding comments to document:", error);
-                this.displayError("評価コメントの追加中にエラーが発生しました");
+            // 分類結果をログ出力
+            this.categoryComments.forEach((comments, categoryId) => {
+                console.log(`カテゴリ "${categoryId}" のコメント数: ${comments.length}`);
+            });
+
+            // 現在選択されているカテゴリのコメントのみを表示
+            if (this.activeCategory) {
+                console.log(`アクティブなカテゴリ "${this.activeCategory}" のコメントを表示`);
+                const categoryComments = this.categoryComments.get(this.activeCategory) || [];
+                await this.addCommentsToDocument(categoryComments);
+            } else {
+                console.log("アクティブなカテゴリがありません");
             }
-            console.log("=== 評価プロセス終了 ===");
         } catch (error) {
             console.error("Error displaying evaluations:", error);
-            this.displayError("評価結果の表示中にエラーが発生しました");
+            this.displayError("評価コメントの表示中にエラーが発生しました");
         }
     }
 
@@ -672,181 +579,7 @@ export class UIManager {
     }
 
     /**
-     * 評価結果をPriority順にソート
-     */
-    private sortEvaluationsByPriority(evaluations: EvaluationResult[]): EvaluationResult[] {
-        // 全ての評価結果の詳細をログ出力
-        console.log("\n=== 全評価結果の詳細 ===");
-        
-        // Priority 1から14までの評価結果を確実に表示
-        for (let priority = 1; priority <= 14; priority++) {
-            const evaluationsForPriority = evaluations.filter(e => e.priority === priority);
-            console.log(`\nPriority ${priority} の評価結果:`);
-            
-            if (evaluationsForPriority.length === 0) {
-                console.log("- 評価結果: なし");
-            } else {
-                evaluationsForPriority.forEach((evaluation, index) => {
-                    console.log(`\n評価 ${index + 1} の詳細:`);
-                    console.log(`- カテゴリ: ${evaluation.category}`);
-                    console.log(`- Priority: ${evaluation.priority}`);
-                    console.log(`- 適用範囲: ${evaluation.applicable_to}`);
-                    console.log(`- スコア: ${evaluation.score}`);
-                    console.log(`- 対象文: ${evaluation.target_text || "なし"}`);
-                    console.log(`- フィードバック: ${evaluation.feedback.join(", ")}`);
-                    console.log(`- 改善提案: ${evaluation.improvement_suggestions || "なし"}`);
-                });
-            }
-        }
-        console.log("\n=== 評価結果の詳細表示終了 ===\n");
-
-        return [...evaluations].sort((a, b) => a.priority - b.priority);
-    }
-
-    /**
-     * 課題のある評価のみをフィルタリング
-     */
-    private filterNegativeEvaluations(evaluations: EvaluationResult[]): EvaluationResult[] {
-        return evaluations.filter(evaluation => {
-            // フィードバックが空の場合はスキップ
-            if (!evaluation.feedback || evaluation.feedback.length === 0) {
-                return false;
-            }
-
-            // 「問題なし」のみの場合はスキップ
-            if (evaluation.feedback.length === 1 && evaluation.feedback[0] === "問題なし") {
-                return false;
-            }
-
-            // ポジティブなフィードバックのみの場合はスキップ
-            const hasNegativeFeedback = evaluation.feedback.some(feedback => !this.isPositiveFeedback(feedback));
-            return hasNegativeFeedback;
-        });
-    }
-
-    /**
-     * 評価結果から最上位Priorityの否定的な評価のみを収集
-     */
-    private filterHighestPriorityNegativeEvaluations(evaluations: EvaluationResult[]): EvaluationResult[] {
-        console.log("\n=== フィルタリングプロセス開始 ===");
-        console.log("Priority 1から14の順に評価を確認します");
-        
-        if (evaluations.length === 0) {
-            console.log("評価結果が空のため、フィルタリングをスキップします");
-            return [];
-        }
-        
-        // 評価結果を優先度でグループ化
-        const evaluationsByPriority: { [key: number]: EvaluationResult[] } = {};
-        
-        // まず、優先度ごとにグループ化
-        evaluations.forEach(evaluation => {
-            const priority = evaluation.priority || 999;
-            if (!evaluationsByPriority[priority]) {
-                evaluationsByPriority[priority] = [];
-            }
-            evaluationsByPriority[priority].push(evaluation);
-        });
-
-        // 優先度順（昇順）にソート（Priority 1から14の順）
-        const priorities = Object.keys(evaluationsByPriority)
-            .map(Number)
-            .sort((a, b) => a - b);
-
-        console.log("\n優先度グループ:");
-        priorities.forEach(priority => {
-            console.log(`Priority ${priority}: ${evaluationsByPriority[priority].length}件`);
-            console.log(`- カテゴリ: ${evaluationsByPriority[priority].map(e => e.category).join(', ')}`);
-        });
-
-        // 各優先度レベルで否定的な評価を探す
-        for (const priority of priorities) {
-            console.log(`\n>>> Priority ${priority} の評価を処理中 <<<`);
-            const evaluationsForPriority = evaluationsByPriority[priority];
-            
-            // この優先度の評価結果をapplicable_toごとにグループ化
-            const evaluationsByTarget: { [key: string]: EvaluationResult[] } = {};
-            
-            evaluationsForPriority.forEach(evaluation => {
-                const target = evaluation.applicable_to ? evaluation.applicable_to.join(',') : 'default';
-                if (!evaluationsByTarget[target]) {
-                    evaluationsByTarget[target] = [];
-                }
-                evaluationsByTarget[target].push(evaluation);
-            });
-
-            // 否定的な評価を収集
-            const negativeEvaluations: EvaluationResult[] = [];
-            
-            // 各適用範囲ごとに評価
-            for (const [target, targetEvaluations] of Object.entries(evaluationsByTarget)) {
-                console.log(`\n適用範囲 "${target}" の評価を確認中...`);
-                
-                // この適用範囲で否定的な評価を探す
-                const negativeEvaluationsForTarget = targetEvaluations.filter(evaluation => {
-                    // フィードバックが空の場合はスキップ
-                    if (!evaluation.feedback || evaluation.feedback.length === 0) {
-                        return false;
-                    }
-
-                    // 「問題なし」のみの場合はスキップ
-                    if (evaluation.feedback.length === 1 && evaluation.feedback[0] === "問題なし") {
-                        return false;
-                    }
-
-                    // ポジティブなフィードバックのみの場合はスキップ
-                    const hasNegativeFeedback = evaluation.feedback.some(feedback => !this.isPositiveFeedback(feedback));
-                    return hasNegativeFeedback;
-                });
-
-                if (negativeEvaluationsForTarget.length > 0) {
-                    console.log(`適用範囲 "${target}" で ${negativeEvaluationsForTarget.length} 件の否定的な評価が見つかりました`);
-                    // セクション識別子でソートして追加
-                    const sortedEvaluations = negativeEvaluationsForTarget.sort((a, b) => {
-                        const sectionA = this.extractSectionNumber(a.target_sentence);
-                        const sectionB = this.extractSectionNumber(b.target_sentence);
-                        return sectionA - sectionB;
-                    });
-                    negativeEvaluations.push(...sortedEvaluations);
-                }
-            }
-
-            // この優先度で否定的な評価が見つかった場合、それを返して終了
-            if (negativeEvaluations.length > 0) {
-                console.log(`\n>>> Priority ${priority} で ${negativeEvaluations.length} 件の否定的な評価が見つかりました <<<`);
-                console.log("=== フィルタリングプロセス終了 ===");
-                return negativeEvaluations;  // 最上位Priorityの評価のみを返す
-            }
-            
-            console.log(`\n>>> Priority ${priority} では否定的な評価が見つかりませんでした。次のPriorityを確認します <<<`);
-        }
-
-        console.log("\nすべてのPriorityで否定的な評価が見つかりませんでした");
-        console.log("=== フィルタリングプロセス終了 ===");
-        return [];
-    }
-
-    /**
-     * セクション番号を抽出する
-     */
-    private extractSectionNumber(targetSentence: string): number {
-        if (!targetSentence) return 999;
-        
-        const match = targetSentence.match(/本文段落(\d+)/);
-        if (match) {
-            return parseInt(match[1], 10);
-        }
-        
-        // サマリーは最優先
-        if (targetSentence.includes("[サマリー]")) {
-            return 0;
-        }
-        
-        return 999;  // その他のケース
-    }
-
-    /**
-     * 評価コメントをWord文書に追加する
+     * コメントをWord文書に追加する
      */
     private async addCommentsToDocument(evaluations: EvaluationResult[]): Promise<void> {
         try {
@@ -854,28 +587,13 @@ export class UIManager {
                 console.log("\n=== Word文書へのコメント追加プロセス開始 ===");
                 console.log("1. 文書のパラグラフを取得中...");
                 const paragraphs = context.document.body.paragraphs;
-                // 必要なプロパティをロード
                 paragraphs.load(["text", "firstLineIndent", "leftIndent"]);
                 await context.sync();
                 console.log(`取得したパラグラフ数: ${paragraphs.items.length}`);
 
-                // パラグラフの内容をログ出力
-                console.log("\n=== 文書の構造 ===");
-                paragraphs.items.forEach((paragraph, index) => {
-                    console.log(`[段落 ${index + 1}]`);
-                    console.log(`- テキスト: ${paragraph.text}`);
-                    console.log(`- インデント: ${paragraph.firstLineIndent || 0} + ${paragraph.leftIndent || 0}`);
-                });
-                console.log("==================");
-
-                // 最高優先度の評価のみを取得
-                console.log("\n2. 最高優先度の評価を取得");
-                const highestPriorityEvaluations = this.filterHighestPriorityNegativeEvaluations(evaluations);
-                console.log(`処理対象の評価数: ${highestPriorityEvaluations.length}`);
-                
                 // 各評価結果に対してコメントを追加
-                for (const evaluation of highestPriorityEvaluations) {
-                    console.log(`\n3. 評価結果を処理中:`);
+                for (const evaluation of evaluations) {
+                    console.log(`\n評価結果を処理中:`);
                     console.log(`- カテゴリ: ${evaluation.category}`);
                     console.log(`- 適用範囲: ${evaluation.applicable_to?.join(', ')}`);
 
@@ -886,7 +604,7 @@ export class UIManager {
                     }
 
                     // インデントレベルに基づいて対象段落を取得
-                    console.log("\n4. 対象段落を取得中...");
+                    console.log("\n対象段落を取得中...");
                     const targetParagraphs = await this.getTargetParagraphs(paragraphs, evaluation.applicable_to || []);
                     console.log(`対象段落数: ${targetParagraphs.length}`);
                     
@@ -898,7 +616,7 @@ export class UIManager {
 
                     // 対象の段落を探す
                     const targetText = evaluation.target_sentence.trim();
-                    console.log(`\n5. 検索対象テキスト: "${targetText}"`);
+                    console.log(`\n検索対象テキスト: "${targetText}"`);
 
                     // 対象段落にコメントを追加
                     let matchFound = false;

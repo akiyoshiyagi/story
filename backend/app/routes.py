@@ -16,9 +16,6 @@ class OpenAIRequest(BaseModel):
 @router.get('/health')
 async def health_check():
     """ヘルスチェックエンドポイント"""
-    is_healthy = check_health()
-    if not is_healthy:
-        raise HTTPException(status_code=503, detail="Service Unavailable")
     return {'status': 'healthy'}
 
 @router.post('/openai/evaluate')

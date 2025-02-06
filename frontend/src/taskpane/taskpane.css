@@ -49,7 +49,8 @@ li {
     height: calc(100vh - 38px);
     margin-top: 38px;
     box-sizing: border-box;
-    overflow: hidden;
+    overflow-y: auto;
+    padding-bottom: 60px; /* ボタンの高さ分の余白 */
 }
 
 .score-section {
@@ -205,9 +206,7 @@ li {
 .status-section {
     padding: 8px;
     background-color: white;
-    border-top: 1px solid #e1e1e1;
     text-align: center;
-    flex: 0 0 auto;
 }
 
 .status {
@@ -292,11 +291,15 @@ li {
 }
 
 .button-section {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
     padding: 8px;
     background-color: white;
     border-top: 1px solid #e1e1e1;
     text-align: center;
-    flex: 0 0 auto;
+    z-index: 100;
 }
 
 .ms-Button.ms-Button--primary {
@@ -326,11 +329,11 @@ b {
 /* ローディングスピナー */
 .loading-spinner {
     display: none;
-    width: 24px;
-    height: 24px;
-    margin: 0 auto;
-    border: 3px solid #f3f3f3;
-    border-top: 3px solid #2b579a;
+    width: 20px;
+    height: 20px;
+    margin: 0 auto 8px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #2b579a;
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -506,4 +509,107 @@ b {
 
 .evaluation-header:focus:not(:focus-visible) {
     outline: none;
+}
+
+.category-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.category-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background-color: #fff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.category-button:hover {
+    background-color: #f0f0f0;
+    transform: translateY(-2px);
+}
+
+.category-button.active {
+    background-color: #e6f3ff;
+    border-color: #0078d4;
+    color: #0078d4;
+}
+
+.category-icon {
+    font-size: 24px;
+    margin-bottom: 4px;
+}
+
+.category-label {
+    font-size: 12px;
+    text-align: center;
+}
+
+/* カテゴリ別評価 */
+.category-scores {
+    padding: 8px;
+    background-color: white;
+}
+
+.category-scores h2 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+}
+
+.category-score {
+    margin-bottom: 8px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.category-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+}
+
+.category-title {
+    font-size: 12px;
+    color: #333;
+}
+
+.score-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.score {
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+}
+
+.judgment {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.judgment[data-status="良い"] {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+}
+
+.judgment[data-status="普通"] {
+    background-color: #fff3e0;
+    color: #f57c00;
+}
+
+.judgment[data-status="要改善"] {
+    background-color: #ffebee;
+    color: #c62828;
 }

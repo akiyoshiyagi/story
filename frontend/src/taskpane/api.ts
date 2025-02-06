@@ -24,7 +24,7 @@ interface OpenAIRequest {
 // 共通のフェッチオプション
 const fetchOptions = {
     mode: 'cors' as RequestMode,
-    credentials: 'include' as RequestCredentials,
+    credentials: 'same-origin' as RequestCredentials,
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -65,11 +65,20 @@ export async function reviewDocument(document: DocumentStructure): Promise<Revie
             ]).filter(text => text && text.trim().length > 0) // 空の段落を除外
         };
 
-        console.log('Sending request to API:', {
-            url: API_ENDPOINTS.REVIEW,
-            method: 'POST',
-            headers: devFetchOptions.headers,
-            data: requestData
+        console.log('\n=== APIリクエスト詳細 ===');
+        console.log('リクエストURL:', API_ENDPOINTS.REVIEW);
+        console.log('リクエストメソッド: POST');
+        console.log('リクエストヘッダー:', devFetchOptions.headers);
+        console.log('リクエストデータ:', {
+            title: requestData.title,
+            summary_length: requestData.summary.length,
+            full_text_length: requestData.full_text.length,
+            paragraphs_count: requestData.paragraphs.length
+        });
+        console.log('リクエスト本文のサンプル:', {
+            summary: requestData.summary.substring(0, 100) + '...',
+            full_text: requestData.full_text.substring(0, 100) + '...',
+            paragraphs: requestData.paragraphs.slice(0, 3).map(p => p.substring(0, 50) + '...')
         });
 
         // APIリクエストを送信
@@ -79,28 +88,87 @@ export async function reviewDocument(document: DocumentStructure): Promise<Revie
             body: JSON.stringify(requestData)
         });
 
+        console.log('\n=== APIレスポンス基本情報 ===');
+        console.log('ステータスコード:', response.status);
+        console.log('ステータステキスト:', response.statusText);
+        const headers: { [key: string]: string } = {};
+        response.headers.forEach((value, key) => {
+            headers[key] = value;
+        });
+        console.log('レスポンスヘッダー:', headers);
+
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('API error response:', errorText);
-            let errorMessage = `API error: ${response.status}`;
+            console.error('\n=== APIエラーレスポンス ===');
+            console.error('エラーテキスト:', errorText);
+            let errorMessage = `APIエラー: ${response.status}`;
             try {
                 const errorJson = JSON.parse(errorText);
                 errorMessage = errorJson.detail || errorJson.message || errorMessage;
+                console.error('パース済みエラー:', errorJson);
             } catch (e) {
-                // JSONパースに失敗した場合は元のエラーテキストを使用
+                console.error('エラーJSONのパースに失敗:', e);
             }
             throw new Error(errorMessage);
         }
 
         const result = await response.json();
-        if (!result || !result.evaluations) {
-            throw new Error("評価結果のフォーマットが不正です");
+        
+        console.log('\n=== APIレスポンス詳細 ===');
+        console.log('評価結果:', {
+            evaluations_count: result.evaluations?.length || 0,
+            categories_count: result.categories?.length || 0,
+            category_scores_count: result.categoryScores?.length || 0,
+            total_score: result.totalScore,
+            total_judgment: result.totalJudgment
+        });
+
+        if (result.evaluations?.length > 0) {
+            console.log('\n=== 評価コメントサンプル ===');
+            result.evaluations.slice(0, 3).forEach((evaluation: { 
+                categoryId: string;
+                criteriaId: string;
+                score: number;
+                feedback: string;
+            }, index: number) => {
+                console.log(`評価 ${index + 1}:`, {
+                    categoryId: evaluation.categoryId,
+                    criteriaId: evaluation.criteriaId,
+                    score: evaluation.score,
+                    feedback: evaluation.feedback.substring(0, 100) + '...'
+                });
+            });
+        }
+
+        // レスポンスの検証を強化
+        if (!result) {
+            throw new Error("APIレスポンスが空です");
+        }
+        if (!Array.isArray(result.evaluations)) {
+            throw new Error("評価結果の形式が不正です: evaluationsが配列ではありません");
+        }
+        if (!Array.isArray(result.categories)) {
+            throw new Error("評価結果の形式が不正です: categoriesが配列ではありません");
+        }
+        if (!Array.isArray(result.categoryScores)) {
+            throw new Error("評価結果の形式が不正です: categoryScoresが配列ではありません");
+        }
+        if (typeof result.totalScore !== 'number') {
+            throw new Error("評価結果の形式が不正です: totalScoreが数値ではありません");
+        }
+        if (typeof result.totalJudgment !== 'string') {
+            throw new Error("評価結果の形式が不正です: totalJudgmentが文字列ではありません");
+        }
+
+        // 評価結果が空の場合は警告を出力
+        if (result.evaluations.length === 0) {
+            console.warn('\n警告: 評価結果が空です');
         }
         
-        console.log('API response:', result);
         return result;
     } catch (error) {
-        console.error('API request failed:', error);
+        console.error('\n=== APIリクエストエラー ===');
+        console.error('エラー詳細:', error);
         throw error;
     }
 }

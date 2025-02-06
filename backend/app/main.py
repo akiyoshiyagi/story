@@ -42,14 +42,18 @@ settings = get_settings()
 # CORSミドルウェアの設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://localhost:3001"],  # ワイルドカード * から特定のオリジンに変更
+    allow_origins=[
+        "https://localhost:3001",  # Office Add-inのオリジン
+        "http://localhost:3001",
+        "http://127.0.0.1:3001"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ルーターの登録
-app.include_router(routes.router)
+app.include_router(routes.router, prefix="/api")
 
 class DocumentRequest(BaseModel):
     title: str

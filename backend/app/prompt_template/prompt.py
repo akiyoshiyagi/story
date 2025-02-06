@@ -367,9 +367,9 @@ EVALUATION_CRITERIA = [
 
         ### 出力要件
         - ストーリーが逐次的展開しているとみなせる場合
-        ”逐次的展開”
+        "逐次的展開"
         - ストーリーが逐次的展開しているとみなせない場合
-        ”ではない”
+        "ではない"
         - 理由や判断の理由等は出力しないでください
 
         ### 評価項目
@@ -377,8 +377,8 @@ EVALUATION_CRITERIA = [
 
         ### 逐次的展開の例（段階を追って順番に論理展開されている）
         - マルチテナント型の倉庫は、各社各様の要求に依存しないレイアウトを提供することが必要なため、標準化は必須
-        - マルチテナント型の標準化によってBTS型にも標準化の波が訪れると考えられる
-        - このトレンドを受けて、各社が標準倉庫の開発に乗り出している中、T社式の標準を浸透させられるかは今後のイニシアチブに大きく係る
+        - マルチテナント型の標準化によってBTS型にも標準化の波が訪れると考えられる
+        - このトレンドを受けて、各社が標準倉庫の開発に乗り出している中、T社式の標準を浸透させられるかは今後のイニシアチブに大きく係る
 
         ### 出力例
         - ではない
@@ -424,7 +424,7 @@ EVALUATION_CRITERIA = [
         - 専門家としての視点を維持し、客観的な評価を行ってください。
 
         ### 評価項目
-        1. 以下の条件をすべて満たすか
+        1. 以下の条件をすべて満たすか：
         - ストーリ―センテンス間で内容に矛盾はないか
         - ストーリ―センテンスからサマリーセンテンスを導出するために、ストーリーセンテンス以外の追加の情報は必要ないか
         - ストーリーセンテンスからサマリ―センテンスを導出する際に、論理的な推論で導出できているか
@@ -444,52 +444,35 @@ EVALUATION_CRITERIA = [
         "name": "根拠s, 詳細s⇒主張",
         "description": """
         ### 役割
-        あなたは戦略コンサルティングの専門家であり、ストーリーテリングと論理構成の評価者です。
+        あなたは戦略コンサルティングの専門家で、サマリーとストーリーの論理的な関係を評価する分析官です。
 
         ### 目的
-        提供された複数のストーリーセンテンスを評価し、指定された評価項目に基づいて、改善が必要な点を特定することです。
+        サマリーとストーリーの論理的な関係を分析し、主張と根拠の関係が適切かを評価します。
 
         ### 制約条件
-        1. 評価は客観的かつ公平に行う。
-        2. 指定された評価項目のみを使用する。
-        3. 問題点が見つかった場合のみ、該当する評価項目と問題のあるセンテンスを出力する。
-        4. 評価結果は簡潔かつ明確に提示する
+        1. 問題点が見つかった場合のみ、該当する評価項目を指摘してください。
+        2. 改善案の提示は不要です。問題点の指摘のみを行ってください。
 
         ### 思考プロセス
-        1. サマリーセンテンス及びストーリーセンテンスを注意深く読み、全体の構造を把握する。
-        2. 評価項目に基づいて分析を行う。
-        3. 最終的な評価結果をまとめる。
-
-        ### 出力要件
-        - 条件を満たしている場合
-        問題なし
-        - 条件を満たしていない場合
-        根拠s,詳細s-主張サマリー：
-        （サマリーの文章）
-        問題点：
-        （評価項目を満たしていない点）
-
-        #### ガイドライン
-        - 制約条件を厳守し、問題点のみを簡潔に指摘してください。
-        - 専門家としての視点を維持し、客観的な評価を行ってください。
+        1. サマリーの主張を特定する
+        2. ストーリーの中から主張を支える根拠や詳細を探す
+        3. 主張と根拠の関係を評価する
+        4. 問題点がある場合のみ指摘する
 
         ### 評価項目
-        1. 以下の条件をすべて満たすか：
-        - ストーリ―センテンス間で内容に矛盾はないか
-        - ストーリ―センテンスからサマリーセンテンスを導出するために、ストーリーセンテンス以外の追加の情報は必要ないか
-        - ストーリーセンテンスからサマリ―センテンスを導出する際に、論理的な推論で導出できているか
-        - ストーリーセンテンスからサマリ―センテンスを導出する際に、論理的な誤りや誤謬が含まれていないか
+        1. サマリーの主張に対して、ストーリーで十分な根拠や詳細が提供されているか
+        2. ストーリーの内容がサマリーの主張と論理的に整合しているか
+        3. サマリーで触れられていない重要な内容がストーリーに含まれていないか
 
-        ### 出力例
-        根拠s,詳細s-主張サマリー；
-        「競合ソリューションが採用する「点群データによる3Dモデル生成」アプローチでは業務に必要な精度が出なかったが、「BIM＋Visual SLAM」という技術の組み合わせによって十分な精度が実現された」
-        問題点 ;
-        サマリーには「点群データによる3Dモデル生成」との比較が明示されているが、ストーリー内にはこの「点群データ」に言及がないため、サマリーの内容が論理的に導出できません。
+        ### 出力要件
+        - 問題点がある場合のみ、以下の形式で出力してください：
+          問題あり：問題内容
+        - 問題がない場合は、"問題なし"と出力してください。
 
         ### 最終指示
-        上記の指示に従って、提供されたストーリーセンテンスを評価し、問題点がある場合のみ、該当する評価項目と問題のあるセンテンスを指定されたフォーマットで出力してください。すべての評価項目を満たしている場合は、その旨を簡潔に伝えてください
+        提供されたサマリーとストーリーを分析し、上記の評価項目に基づいて問題点のみを指摘してください。
         """,
-        "priority": 10,
+        "priority": 1,
         "applicable_to": ["SUMMARY_AND_STORY"]
     },
     {
@@ -766,29 +749,87 @@ def identify_target_type(document_structure):
     else:
         raise ValueError("Invalid document structure")
 
-def get_evaluation_text(document_structure, target_type):
+def get_evaluation_text(document_structure: dict, applicable_to: list[str]) -> str:
     """
     評価対象範囲に応じたテキストを取得する
-    
+
     Args:
         document_structure (dict): 文書構造を表す辞書
-        target_type (str): 評価対象範囲の種類
-    
+        applicable_to (list[str]): 評価対象範囲のリスト
+
     Returns:
-        str: 評価対象テキスト
+        str: 評価対象テキスト（セクション区切り付き）
     """
     text_parts = []
-    
-    if target_type in ["SUMMARY_ONLY", "SUMMARY_AND_STORY", "FULL_DOCUMENT"]:
-        text_parts.append(document_structure.get("summary", ""))
-    
-    if target_type in ["SUMMARY_AND_STORY", "FULL_DOCUMENT", "STORY_AND_BODY"]:
-        text_parts.append(document_structure.get("story", ""))
-    
-    if target_type in ["FULL_DOCUMENT", "STORY_AND_BODY"]:
-        text_parts.append(document_structure.get("body", ""))
-    
-    return "\n\n".join(filter(None, text_parts))
+
+    # サマリーセクションの処理
+    def get_summary_section():
+        summary = document_structure.get("summary", "").strip()
+        if summary:
+            return f"[サマリー]\n{summary}"
+        return ""
+
+    # ストーリーセクションの処理
+    def get_story_section():
+        story = document_structure.get("story", "").strip()
+        if story:
+            story_parts = []
+            for i, paragraph in enumerate(story.split("\n\n"), 1):
+                if paragraph.strip():
+                    story_parts.append(f"[ストーリー段落{i}]\n{paragraph.strip()}")
+            return "\n\n".join(story_parts)
+        return ""
+
+    # 本文セクションの処理
+    def get_body_section():
+        body = document_structure.get("full_text", "").strip()
+        if body:
+            return f"[本文]\n{body}"
+        return ""
+
+    # 評価対象範囲に応じてテキストを取得
+    if "FULL_DOCUMENT" in applicable_to:
+        # サマリー、ストーリー、本文の全てを含む
+        summary_text = get_summary_section()
+        if summary_text:
+            text_parts.append(summary_text)
+        
+        story_text = get_story_section()
+        if story_text:
+            text_parts.append(story_text)
+        
+        body_text = get_body_section()
+        if body_text:
+            text_parts.append(body_text)
+
+    elif "SUMMARY_ONLY" in applicable_to:
+        # サマリーのみを含む
+        summary_text = get_summary_section()
+        if summary_text:
+            text_parts.append(summary_text)
+
+    elif "SUMMARY_AND_STORY" in applicable_to:
+        # サマリーとストーリーを含む
+        summary_text = get_summary_section()
+        if summary_text:
+            text_parts.append(summary_text)
+        
+        story_text = get_story_section()
+        if story_text:
+            text_parts.append(story_text)
+
+    elif "STORY_AND_BODY" in applicable_to:
+        # ストーリーと本文を含む
+        story_text = get_story_section()
+        if story_text:
+            text_parts.append(story_text)
+        
+        body_text = get_body_section()
+        if body_text:
+            text_parts.append(body_text)
+
+    # 各セクションを改行で結合
+    return "\n\n".join(text_parts)
 
 def get_applicable_criteria(target_type):
     """
