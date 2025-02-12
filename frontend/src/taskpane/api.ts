@@ -3,6 +3,7 @@
  */
 import { API_ENDPOINTS, OPENAI_CONFIG } from "./const";
 import { DocumentStructure, ReviewResponse } from "./types";
+import { addEvaluationComments, selectAllCategories } from "./documentUtil";
 
 interface ReviewRequest {
     title: string;
@@ -163,6 +164,17 @@ export async function reviewDocument(document: DocumentStructure): Promise<Revie
         // 評価結果が空の場合は警告を出力
         if (result.evaluations.length === 0) {
             console.warn('\n警告: 評価結果が空です');
+        }
+
+        // 評価結果をコメントとして追加
+        try {
+            // 初期状態ではすべてのカテゴリを選択
+            selectAllCategories();
+            await addEvaluationComments(result.evaluations);
+            console.log('評価コメントを追加しました');
+        } catch (error) {
+            console.error('評価コメントの追加に失敗:', error);
+            throw error;
         }
         
         return result;

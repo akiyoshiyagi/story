@@ -40,7 +40,7 @@ li {
 
 .ms-welcome__header h1 {
     margin: 0;
-    font-size: 18px;
+    font-size: 16px;
 }
 
 .ms-welcome__main {
@@ -69,17 +69,17 @@ li {
     align-items: center;
     justify-content: center;
     gap: 1rem;
-    margin: 0.5rem 0;
+    margin: 8px 0;
 }
 
 .score {
-    font-size: 1.8rem;
+    font-size: 24px;
     font-weight: bold;
     color: #333;
 }
 
 .judgment {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: bold;
     padding: 2px 6px;
     border-radius: 3px;
@@ -211,7 +211,7 @@ li {
 
 .status {
     display: inline-block;
-    margin: 0;
+    margin: 4px 0;
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 11px;
@@ -511,44 +511,45 @@ b {
     outline: none;
 }
 
+/* カテゴリボタン */
 .category-buttons {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 1fr;
     gap: 8px;
-    margin: 16px 0;
+    padding: 8px;
 }
 
 .category-button {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 8px 12px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
+    justify-content: center;
+    padding: 12px 8px;
+    border: 1px solid #e1e1e1;
+    border-radius: 4px;
     background-color: #fff;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
+    min-height: 50px;
+    width: 100%;
 }
 
 .category-button:hover {
-    background-color: #f0f0f0;
-    transform: translateY(-2px);
+    background-color: #f8f9fa;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .category-button.active {
     background-color: #e6f3ff;
     border-color: #0078d4;
-    color: #0078d4;
 }
 
-.category-icon {
-    font-size: 24px;
-    margin-bottom: 4px;
-}
-
-.category-label {
+.category-title {
     font-size: 12px;
+    font-weight: bold;
     text-align: center;
+    margin-bottom: 4px;
 }
 
 /* カテゴリ別評価 */
@@ -558,7 +559,8 @@ b {
 }
 
 .category-scores h2 {
-    margin: 0 0 8px 0;
+    margin: 8px 0;
+    padding: 0 8px;
     font-size: 14px;
 }
 
@@ -584,12 +586,6 @@ b {
     display: flex;
     justify-content: space-between;
     align-items: center;
-}
-
-.score {
-    font-size: 16px;
-    font-weight: bold;
-    color: #333;
 }
 
 .judgment {

@@ -10,12 +10,12 @@ declare namespace Word {
 
     interface CommentCollection {
         items: Comment[];
-        load(properties: string): void;
+        load(properties?: string): void;
     }
 
     interface Comment {
+        content: string;
         delete(): void;
-        text: string;
     }
 
     interface Range {
@@ -23,6 +23,8 @@ declare namespace Word {
         insertComment(text: string): Comment;
         text: string;
         insertContentControl(): ContentControl;
+        comments: CommentCollection;
+        getComments(): CommentCollection;
     }
 
     interface Paragraph {
@@ -70,9 +72,9 @@ export interface StoryStructure {
 export interface Evaluation {
     categoryId: string;
     criteriaId: string;
-    score: number;
     feedback: string;
-    location: string;
+    score: number;
+    location?: string;
 }
 
 export interface Category {
@@ -83,17 +85,14 @@ export interface Category {
 
 export interface CategoryScore {
     categoryId: string;
-    categoryName: string;
     score: number;
-    judgment: "OK" | "NG";
 }
 
 // APIレスポンスの型定義
 export interface ReviewResponse {
-    evaluations: Evaluation[];
-    categories: Category[];
-    categoryScores: CategoryScore[];
-    totalScore: number;
-    totalJudgment: "OK" | "NG";
     error?: string;
+    totalScore: number;
+    totalJudgment: string;
+    categoryScores: CategoryScore[];
+    evaluations: Evaluation[];
 } 

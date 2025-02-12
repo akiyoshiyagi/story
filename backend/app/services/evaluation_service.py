@@ -5,14 +5,16 @@ import logging
 import asyncio
 import sys
 import json
+import traceback
 from typing import List, Dict, Any, Optional, Tuple
 from .text_analyzer import TextAnalyzer
-from ..prompt_template.prompt import EVALUATION_CRITERIA, EVALUATION_PROMPT_TEMPLATE
+from ..prompt_template.prompt import EVALUATION_CRITERIA, EVALUATION_PROMPT_TEMPLATE, SYSTEM_PROMPT, get_evaluation_text, identify_target_type
 from openai import AsyncAzureOpenAI
-from ..models.evaluation import EvaluationResult
+from ..models.evaluation_result import EvaluationResult
 from ..config import get_settings, CRITERIA_MAPPING
 from ..models.evaluation_result import LocationComments, Comment, Position
 from ..models.criteria_info import CriteriaInfo
+from .openai_service import call_openai_api, parse_openai_response, EvaluationError
 
 # ロガーの設定
 logger = logging.getLogger(__name__)
@@ -50,13 +52,20 @@ class EvaluationService:
         self.client = AsyncAzureOpenAI(
             api_key=settings.OPENAI_API_KEY,
             api_version=settings.OPENAI_API_VERSION,
-            azure_endpoint=settings.OPENAI_API_BASE_URL,
+            base_url=settings.OPENAI_API_BASE_URL,
             timeout=settings.OPENAI_TIMEOUT,
             max_retries=settings.OPENAI_MAX_RETRIES
         )
         logger.debug("EvaluationService initialized with Azure OpenAI client")
         self.settings = get_settings()
         self.logger = logging.getLogger(__name__)
+        
+        # エラー情報の初期化
+        self.error_details = {
+            "last_error": None,
+            "error_count": 0,
+            "category_errors": {}
+        }
 
     async def evaluate_document(
         self,
@@ -77,18 +86,27 @@ class EvaluationService:
         Returns:
             Dict[str, Any]: 評価結果を含む辞書
         """
-        self.logger.info("\n=== 文書評価プロセスを開始 ===")
-        self.logger.info(f"タイトル: {title}")
-        self.logger.debug(f"サマリー: {summary[:100]}...")
-        self.logger.debug(f"段落数: {len(paragraphs)}")
-        self.logger.debug(f"本文長: {len(full_text)}")
-
         try:
-            # 入力値の検証
-            if not isinstance(full_text, str) or not isinstance(title, str):
-                self.logger.error("入力値の型が不正: full_textとtitleは文字列である必要があります")
-                raise ValueError("文書本文とタイトルは文字列である必要があります")
+            self.logger.info("\n=== 文書評価プロセスを開始 ===")
+            
+            # エラー情報をリセット
+            self.error_details = {
+                "last_error": None,
+                "error_count": 0,
+                "category_errors": {}
+            }
+            
+            # 入力値の検証と前処理
+            validation_result = self._validate_input(full_text, summary, paragraphs, title)
+            if validation_result.get("error"):
+                return self._create_error_response(validation_result["error"])
 
+            self.logger.info(f"タイトル: {title}")
+            self.logger.debug(f"サマリー: {summary[:100]}...")
+            self.logger.debug(f"段落数: {len(paragraphs)}")
+            self.logger.debug(f"本文長: {len(full_text)}")
+
+            # 入力値の検証
             if not full_text.strip() or not title.strip():
                 self.logger.warning("空の文書またはタイトルが入力されました")
                 return {
@@ -155,48 +173,54 @@ class EvaluationService:
                     
                     if locations:
                         self.logger.debug(f"評価結果件数: {len(locations)}")
+                
+                        # カテゴリ情報を追加
+                        category_data = {
+                            "id": category_id,
+                            "name": category_info.display_name,
+                            "priority": category_info.priority
+                        }
+                        result["categories"].append(category_data)
+
+                        # 評価結果を追加
+                        category_evaluations = []
+                        
+                        self.logger.debug(f"\n--- 評価結果の詳細 ---")
+                        for location in locations:
+                            for comment in location.comments:
+                                evaluation_data = {
+                                    "categoryId": category_id,
+                                    "criteriaId": comment.criteria_id,
+                                    "score": comment.score,
+                                    "feedback": comment.content,
+                                    "location": location.location
+                                }
+                                result["evaluations"].append(evaluation_data)
+                                category_evaluations.append(evaluation_data)
+                                
+                                self.logger.debug(f"\n[評価基準: {comment.criteria_id}]")
+                                self.logger.debug(f"スコア: {comment.score * 100:.1f}点")
+                                self.logger.debug(f"フィードバック: {comment.content}")
+                                self.logger.debug(f"評価対象: {location.location}")
+
+                        # カテゴリごとの平均スコアと判定を計算
+                        category_score_data = self._calculate_category_score(category_evaluations, category_info)
+                        result["categoryScores"].append(category_score_data)
+                        
+                        self.logger.info(f"\n▼ カテゴリ評価結果")
+                        self.logger.info(f"カテゴリ: {category_score_data['categoryName']}")
+                        self.logger.info(f"平均スコア: {category_score_data['score']}点")
+                        self.logger.info(f"判定: {category_score_data['judgment']}")
                     else:
                         self.logger.warning(f"カテゴリ {category_id} の評価結果が空です")
-                    
-                    # カテゴリ情報を追加
-                    category_data = {
-                        "id": category_id,
-                        "name": category_info.display_name,
-                        "priority": category_info.priority
-                    }
-                    result["categories"].append(category_data)
-
-                    # 評価結果を追加
-                    category_evaluations = []
-                    
-                    self.logger.debug(f"\n--- 評価結果の詳細 ---")
-                    for location in locations:
-                        for comment in location.comments:
-                            evaluation_data = {
-                                "categoryId": category_id,
-                                "criteriaId": comment.criteria_id,
-                                "score": comment.score,
-                                "feedback": comment.content,
-                                "location": location.location
-                            }
-                            result["evaluations"].append(evaluation_data)
-                            category_evaluations.append(evaluation_data)
-                            
-                            self.logger.debug(f"\n[評価基準: {comment.criteria_id}]")
-                            self.logger.debug(f"スコア: {comment.score * 100:.1f}点")
-                            self.logger.debug(f"フィードバック: {comment.content}")
-                            self.logger.debug(f"評価対象: {location.location}")
-
-                    # カテゴリごとの平均スコアと判定を計算
-                    category_score_data = self._calculate_category_score(category_evaluations, category_info)
-                    result["categoryScores"].append(category_score_data)
-                    
-                    self.logger.info(f"\n▼ カテゴリ評価結果")
-                    self.logger.info(f"カテゴリ: {category_score_data['categoryName']}")
-                    self.logger.info(f"平均スコア: {category_score_data['score']}点")
-                    self.logger.info(f"判定: {category_score_data['judgment']}")
 
                 except Exception as e:
+                    self.error_details["error_count"] += 1
+                    self.error_details["category_errors"][category_id] = {
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "traceback": traceback.format_exc()
+                    }
                     self.logger.error(f"カテゴリ '{category_info.display_name}' の評価中にエラーが発生: {str(e)}")
                     continue
 
@@ -215,148 +239,240 @@ class EvaluationService:
             return result
 
         except Exception as e:
-            self.logger.error(f"文書評価中にエラーが発生: {str(e)}", exc_info=True)
+            error_info = {
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "traceback": traceback.format_exc(),
+                "error_details": self.error_details
+            }
+            
+            self.logger.error("文書評価中に致命的なエラーが発生:")
+            self.logger.error(json.dumps(error_info, ensure_ascii=False, indent=2))
+            
             return {
                 "evaluations": [],
                 "categories": [],
                 "categoryScores": [],
                 "totalScore": 0.0,
                 "totalJudgment": "NG",
-                "error": str(e)
+                "error": str(e),
+                "error_details": error_info
             }
+
+    def _validate_input(self, full_text: str, summary: str, paragraphs: list[str], title: str) -> Dict[str, Any]:
+        """入力値を検証する"""
+        try:
+            if not isinstance(full_text, str):
+                return {"error": f"full_textは文字列である必要があります。現在の型: {type(full_text)}"}
+            if not isinstance(summary, str):
+                return {"error": f"summaryは文字列である必要があります。現在の型: {type(summary)}"}
+            if not isinstance(paragraphs, list) or not all(isinstance(p, str) for p in (paragraphs or [])):
+                return {"error": f"paragraphsは文字列のリストである必要があります。現在の型: {type(paragraphs)}"}
+            if not isinstance(title, str) and title is not None:
+                return {"error": f"titleは文字列またはNoneである必要があります。現在の型: {type(title)}"}
+                
+            if not full_text.strip() or not title.strip():
+                return {"error": "空の文書またはタイトルは評価できません"}
+                
+            return {"success": True}
+            
+        except Exception as e:
+            return {"error": f"入力値の検証中にエラーが発生: {str(e)}"}
+
+    def _create_error_response(self, error_message: str) -> Dict[str, Any]:
+        """エラーレスポンスを生成する"""
+        return {
+            "evaluations": [],
+            "categories": [],
+            "categoryScores": [],
+            "totalScore": 0.0,
+            "totalJudgment": "NG",
+            "error": error_message,
+            "error_details": self.error_details
+        }
 
     async def _evaluate_category(self, category_id: str, category_info: CriteriaInfo, document_structure: Dict[str, str]) -> List[LocationComments]:
-        location_comments = []
-        self.logger.debug(f"\n=== カテゴリ {category_id} の評価を開始します ===")
-        self.logger.debug(f"カテゴリ名: {category_info.display_name}")
-        self.logger.debug(f"優先度: {category_info.priority}")
-        self.logger.debug(f"評価基準: {category_info.criteria_ids}")
-        self.logger.debug(f"評価対象範囲: {category_info.applicable_to}")
-
+        """カテゴリごとの評価を実行する"""
         try:
-            # 評価対象のテキストを取得
-            target_text = self._get_evaluation_text(
-                document_structure,
-                category_info.applicable_to
-            )
-            self.logger.debug(f"評価対象テキスト長: {len(target_text)}")
-            self.logger.debug(f"評価対象テキストサンプル: {target_text[:200]}...")
-
-            if not target_text:
-                self.logger.warning(f"カテゴリ {category_id} の評価対象テキストが空です")
-                return [LocationComments(
-                    location=category_id,
-                    comments=[Comment(
-                        criteria_id=category_info.criteria_ids[0],
-                        content="• 評価対象テキストが空です\n• 文書の内容を確認してください",
-                        score=0.0
-                    )]
-                )]
-
-            # document_structureを正しい形式で作成
-            evaluation_doc_structure = {
-                "title": document_structure.get("title", ""),
-                "summary": document_structure.get("summary", ""),
-                "story": document_structure.get("story", ""),
-                "body": target_text,
-                "structure": document_structure.get("structure", {})
-            }
-
-            self.logger.debug("\n=== 評価用文書構造の確認 ===")
-            self.logger.debug(f"タイトル長: {len(evaluation_doc_structure['title'])}")
-            self.logger.debug(f"サマリー長: {len(evaluation_doc_structure['summary'])}")
-            self.logger.debug(f"ストーリー長: {len(evaluation_doc_structure['story'])}")
-            self.logger.debug(f"本文長: {len(evaluation_doc_structure['body'])}")
-
-            # 各評価基準で評価を実行
+            self.logger.debug(f"\n=== カテゴリ {category_id} の評価を開始します ===")
+            
+            # 評価処理の実行
+            location_comments = []
+            
             for criteria_id in category_info.criteria_ids:
                 try:
-                    self.logger.debug(f"\n--- 評価基準 {criteria_id} の評価開始 ---")
-                    evaluations = await self._evaluate_single_criteria(
-                        criteria_id=criteria_id,
-                        document_structure=evaluation_doc_structure
+                    # 評価基準の情報を取得
+                    criteria = next(
+                        (c for c in EVALUATION_CRITERIA if c["name"] == criteria_id),
+                        None
                     )
                     
-                    if evaluations:
-                        self.logger.debug(f"評価結果数: {len(evaluations)}")
-                        for evaluation in evaluations:
-                            if evaluation and isinstance(evaluation, EvaluationResult):
-                                self.logger.debug(f"評価結果:")
-                                self.logger.debug(f"スコア: {evaluation.score}")
-                                self.logger.debug(f"フィードバック: {evaluation.feedback}")
-                                
-                                # 既存のLocationCommentsを探す
-                                location_comment = next(
-                                    (lc for lc in location_comments if lc.location == category_id),
-                                    None
-                                )
-                                
-                                if location_comment:
-                                    # 既存のLocationCommentsにコメントを追加
-                                    location_comment.comments.append(Comment(
-                                        criteria_id=criteria_id,
-                                        content=evaluation.feedback,
-                                        score=evaluation.score
-                                    ))
-                                else:
-                                    # 新しいLocationCommentsを作成
-                                    location_comments.append(LocationComments(
-                                        location=category_id,
-                                        comments=[Comment(
-                                            criteria_id=criteria_id,
-                                            content=evaluation.feedback,
-                                            score=evaluation.score
-                                        )]
-                                    ))
-                    else:
-                        self.logger.warning(f"評価基準 {criteria_id} の評価結果が空です")
-                        location_comments.append(LocationComments(
-                            location=category_id,
+                    if not criteria:
+                        raise ValueError(f"評価基準 {criteria_id} が見つかりません")
+                    
+                    self.logger.debug(f"評価基準の説明: {criteria['description'][:100]}...")
+                    
+                    # 評価対象のテキストを取得
+                    target_type = identify_target_type(document_structure)
+                    target_text = get_evaluation_text(document_structure, target_type)
+                    
+                    if not target_text:
+                        self.logger.warning(f"評価基準 {criteria_id} の評価対象テキストが空です")
+                        return [LocationComments(
+                            location="エラー",
                             comments=[Comment(
                                 criteria_id=criteria_id,
-                                content="• 評価結果が生成できませんでした\n• 該当箇所の評価を再度実行してください",
+                                content="• 評価対象のテキストが空です\n• 文書の内容を確認してください",
+                                score=0.0
+                            )]
+                        )]
+
+                    # 評価メッセージを準備
+                    try:
+                        messages = [
+                            {
+                                "role": "system",
+                                "content": SYSTEM_PROMPT
+                            },
+                            {
+                                "role": "user",
+                                "content": f"""
+以下の評価基準に基づいて、提供されたテキストを評価し、結果を指定された形式で返してください。
+
+【評価基準】
+{criteria['description']}
+
+【評価対象テキスト】
+{target_text}
+
+【出力形式】
+以下のJSON形式で出力してください：
+
+{{
+    "category": "{criteria_id}",
+    "score": 評価スコア（0から1の小数）,
+    "feedback": [
+        "評価コメント1",
+        "評価コメント2",
+        ...
+    ],
+    "target_text": "評価対象の具体的な文章（問題がある場合）",
+    "improvement_suggestions": [
+        "改善提案1",
+        "改善提案2",
+        ...
+    ]
+}}
+
+【注意事項】
+1. 評価結果は必ず上記のJSON形式で返してください
+2. scoreは0から1の小数値で、1が最高評価です
+3. 問題がない場合はscoreを1.0とし、feedbackに「問題なし」を含めてください
+4. target_textは問題がある場合のみ設定し、問題がない場合は空文字列としてください
+5. JSON形式を厳密に守り、余分な説明は含めないでください
+"""
+                            }
+                        ]
+
+                        if not messages:
+                            raise ValueError("評価メッセージの準備に失敗しました")
+
+                        # OpenAI APIを呼び出して評価を実行
+                        response = await call_openai_api(messages)
+                        if not response:
+                            raise ValueError("APIからの応答が空です")
+
+                        # 評価結果をパース
+                        evaluation_results = parse_openai_response({
+                            'choices': [{'message': {'content': response}}]
+                        })
+
+                        if not evaluation_results:
+                            raise ValueError("評価結果のパースに失敗しました")
+
+                        # 評価結果をLocationCommentsに変換
+                        for result in evaluation_results:
+                            # 評価対象テキストの位置を特定
+                            target_location = result.target_text or "全体"
+                            
+                            location_comments.append(LocationComments(
+                                location=target_location,
+                                comments=[Comment(
+                                    criteria_id=criteria_id,
+                                    content=result.feedback,
+                                    score=result.score
+                                )]
+                            ))
+
+                        self.logger.info(f"評価完了: カテゴリ={criteria_id}")
+                        self.logger.debug(f"評価結果数: {len(location_comments)}")
+
+                    except Exception as e:
+                        self.logger.error(f"評価処理中にエラー発生: {str(e)}")
+                        error_message = (
+                            f"• 評価中にエラーが発生しました\n"
+                            f"• エラーの種類: {type(e).__name__}\n"
+                            f"• エラーの詳細: {str(e)}\n"
+                            f"• 対応方法:\n"
+                            f"  - しばらく待ってから再試行してください\n"
+                            f"  - 文書の長さを調整してみてください\n"
+                            f"  - 問題が続く場合は管理者に連絡してください"
+                        )
+                        location_comments.append(LocationComments(
+                            location="エラー",
+                            comments=[Comment(
+                                criteria_id=criteria_id,
+                                content=error_message,
                                 score=0.0
                             )]
                         ))
-                
+
                 except Exception as e:
-                    self.logger.error(f"評価基準 {criteria_id} の評価中にエラーが発生: {str(e)}", exc_info=True)
+                    self.logger.error(f"評価基準 {criteria_id} の評価中にエラー: {str(e)}")
+                    error_message = (
+                        f"• 予期せぬエラーが発生しました\n"
+                        f"• エラーの種類: {type(e).__name__}\n"
+                        f"• エラーの詳細: {str(e)}\n"
+                        f"• 対応方法:\n"
+                        f"  - 評価を再度実行してください\n"
+                        f"  - 問題が続く場合は管理者に連絡してください"
+                    )
                     location_comments.append(LocationComments(
-                        location=category_id,
+                        location="エラー",
                         comments=[Comment(
                             criteria_id=criteria_id,
-                            content="• 評価中にエラーが発生しました\n• 該当箇所の評価を再度実行してください",
+                            content=error_message,
                             score=0.0
                         )]
                     ))
-
-            self.logger.debug(f"\n=== カテゴリ {category_id} の評価完了 ===")
-            self.logger.debug(f"生成されたコメント数: {len(location_comments)}")
             
-            # 評価結果が空の場合のデフォルト値を設定
-            if not location_comments:
-                self.logger.warning(f"カテゴリ {category_id} の評価結果が空のため、デフォルト値を設定します")
-                return [LocationComments(
-                    location=category_id,
-                    comments=[Comment(
-                        criteria_id=category_info.criteria_ids[0],
-                        content="• 評価結果が生成できませんでした\n• 該当箇所の評価を再度実行してください",
-                        score=0.0
-                    )]
-                )]
-                
             return location_comments
-
+            
         except Exception as e:
-            self.logger.error(f"カテゴリ {category_id} の評価中にエラーが発生: {str(e)}", exc_info=True)
-            return [LocationComments(
-                location=category_id,
-                comments=[Comment(
-                    criteria_id=category_info.criteria_ids[0],
-                    content="• 評価中にエラーが発生しました\n• 該当箇所の評価を再度実行してください",
-                    score=0.0
-                )]
-            )]
+            self.logger.error(f"カテゴリ {category_id} の評価中に致命的なエラー: {str(e)}")
+            raise
+
+    def _get_appropriate_section_text(
+        self,
+        document_structure: Dict[str, str],
+        section_type: str,
+        target_text: Optional[str] = None
+    ) -> str:
+        """適切なセクションのテキストを取得する"""
+        try:
+            # target_textが指定され、かつ文書内に存在する場合はそれを使用
+            if target_text:
+                for section in ['summary', 'story', 'body']:
+                    if document_structure.get(section) and target_text in document_structure[section]:
+                        return target_text
+
+            # target_textが見つからない場合は、評価対象タイプに応じたテキストを取得
+            target_type = identify_target_type(document_structure)
+            return get_evaluation_text(document_structure, target_type) or "文書の内容を確認してください"
+            
+        except Exception as e:
+            self.logger.error(f"適切なセクションテキストの取得中にエラー: {str(e)}")
+            return "文書の内容を確認してください"
 
     def _split_document(self, document_text: str) -> List[Dict]:
         """
@@ -370,276 +486,6 @@ class EvaluationService:
         """
         # TODO: 実際の分割ロジックを実装
         return [{"identifier": "全文", "text": document_text}]
-
-    async def _evaluate_single_criteria(self, criteria_id: str, document_structure: Dict[str, str]) -> List[EvaluationResult]:
-        try:
-            # 評価基準の情報を取得
-            criteria = next(
-                (c for c in EVALUATION_CRITERIA if c['id'] == criteria_id),
-                None
-            )
-            
-            if not criteria:
-                self.logger.error(f"評価基準 {criteria_id} が見つかりません")
-                return [EvaluationResult(
-                    criteria_id=criteria_id,
-                    category=criteria_id,
-                    score=0.0,
-                    feedback="• 評価基準が見つかりません\n• システム管理者に連絡してください",
-                    target_text="",
-                    position=None
-                )]
-
-            # 評価基準の説明が存在することを確認
-            if 'description' not in criteria:
-                self.logger.error(f"評価基準 {criteria_id} の説明が見つかりません")
-                return [EvaluationResult(
-                    criteria_id=criteria_id,
-                    category=criteria_id,
-                    score=0.0,
-                    feedback="• 評価基準の説明が定義されていません\n• システム管理者に連絡してください",
-                    target_text="",
-                    position=None
-                )]
-
-            # 評価対象のテキストを取得
-            target_text = self._get_evaluation_text(
-                document_structure,
-                criteria.get('applicable_to', ['FULL_DOCUMENT'])
-            )
-            
-            if not target_text:
-                self.logger.warning("評価対象テキストが空です")
-                return [EvaluationResult(
-                    criteria_id=criteria_id,
-                    category=criteria_id,
-                    score=0.0,
-                    feedback="• 評価対象のテキストが空です\n• 文書の内容を確認してください",
-                    target_text="",
-                    position=None
-                )]
-
-            self.logger.debug(f"\n=== 評価基準 {criteria_id} の評価開始 ===")
-            self.logger.debug(f"評価対象テキスト:\n{target_text}")
-            self.logger.debug(f"評価基準の詳細:\n{json.dumps(criteria, ensure_ascii=False, indent=2)}")
-
-            # 評価プロンプトを構築
-            evaluation_prompt = EVALUATION_PROMPT_TEMPLATE.format(
-                criteria_name=criteria.get('name', criteria_id),
-                criteria_description=criteria['description'],
-                target_text=target_text
-            )
-
-            # Azure OpenAI APIを呼び出し
-            try:
-                response = await self.client.chat.completions.create(
-                    model=self.settings.OPENAI_API_LLM_MODEL_NAME,
-                    messages=[
-                        {"role": "system", "content": "あなたはビジネス文書の評価専門家です。与えられた評価基準に厳密に従って評価を行い、指定された形式で結果を出力してください。"},
-                        {"role": "user", "content": evaluation_prompt}
-                    ],
-                    max_tokens=self.settings.OPENAI_MAX_TOKENS,
-                    temperature=self.settings.OPENAI_TEMPERATURE
-                )
-
-                if not response.choices:
-                    self.logger.error("OpenAI APIからの応答が空です")
-                    return [EvaluationResult(
-                        criteria_id=criteria_id,
-                        category=criteria_id,
-                        score=0.0,
-                        feedback="• APIからの応答が空です\n• 再度評価を実行してください",
-                        target_text="",
-                        position=None
-                    )]
-
-                evaluation_text = response.choices[0].message.content
-                self.logger.debug(f"OpenAI APIからの応答:\n{evaluation_text}")
-
-                if not evaluation_text:
-                    self.logger.error("評価テキストが空です")
-                    return [EvaluationResult(
-                        criteria_id=criteria_id,
-                        category=criteria_id,
-                        score=0.0,
-                        feedback="• 評価結果が空です\n• 再度評価を実行してください",
-                        target_text="",
-                        position=None
-                    )]
-
-                # レスポンスから評価結果を解析
-                evaluation_results = self._parse_evaluation_text(
-                    evaluation_text,
-                    criteria_id,
-                    criteria.get('priority', 1),
-                    criteria.get('applicable_to', ['FULL_DOCUMENT']),
-                    document_structure
-                )
-
-                if not evaluation_results:
-                    self.logger.warning(f"評価基準 {criteria_id} の評価結果が空です")
-                    return [EvaluationResult(
-                        criteria_id=criteria_id,
-                        category=criteria_id,
-                        score=1.0,
-                        feedback="• 問題は見つかりませんでした\n• 評価基準を満たしています",
-                        target_text="",
-                        position=None
-                    )]
-
-                self.logger.debug(f"解析された評価結果:\n{json.dumps([result.dict() for result in evaluation_results], ensure_ascii=False, indent=2)}")
-                return evaluation_results
-
-            except Exception as api_error:
-                self.logger.error(f"OpenAI API呼び出し中にエラーが発生: {str(api_error)}")
-                return [EvaluationResult(
-                    criteria_id=criteria_id,
-                    category=criteria_id,
-                    score=0.0,
-                    feedback="• OpenAI APIでエラーが発生しました\n• 再度評価を実行してください",
-                    target_text="",
-                    position=None
-                )]
-
-        except Exception as e:
-            self.logger.error(f"評価基準 {criteria_id} の評価中にエラーが発生: {str(e)}", exc_info=True)
-            return [EvaluationResult(
-                criteria_id=criteria_id,
-                category=criteria_id,
-                score=0.0,
-                feedback="• 評価中にエラーが発生しました\n• 該当箇所の評価を再度実行してください",
-                target_text="",
-                position=None
-            )]
-
-    def _get_evaluation_text(self, document_structure: Dict[str, str], applicable_to: List[str]) -> str:
-        """
-        評価対象範囲のテキストを取得する
-
-        Args:
-            document_structure (Dict[str, str]): 文書構造
-            applicable_to (List[str]): 評価対象範囲の指定
-
-        Returns:
-            str: 評価対象のテキスト
-        """
-        target_text = ""
-        
-        if "FULL_DOCUMENT" in applicable_to:
-            # サマリ、ストーリー、ボディ、詳細を対象に評価
-            target_text = f"""
-            【サマリー】
-            {document_structure.get('summary', '')}
-            
-            【ストーリー】
-            {document_structure.get('story', '')}
-            
-            【本文】
-            {document_structure.get('body', '')}
-            """
-        
-        elif "SUMMARY_ONLY" in applicable_to:
-            # サマリのまとまりに対して評価
-            target_text = f"""
-            【サマリー】
-            {document_structure.get('summary', '')}
-            """
-        
-        elif "SUMMARY_AND_STORY" in applicable_to:
-            # サマリとストーリーのまとまりに対して評価
-            target_text = f"""
-            【サマリー】
-            {document_structure.get('summary', '')}
-            
-            【ストーリー】
-            {document_structure.get('story', '')}
-            
-            【文章構造の関連性】
-            サマリーとストーリーの各段落は、同じ番号の段落同士が対応関係にあります。
-            """
-        
-        elif "STORY_AND_BODY" in applicable_to:
-            # ストーリーとボディのまとまりに対して評価
-            target_text = f"""
-            【ストーリー】
-            {document_structure.get('story', '')}
-            
-            【本文】
-            {document_structure.get('body', '')}
-            
-            【文章構造の関連性】
-            ストーリーとボディの各段落は、同じ番号の段落同士が対応関係にあります。
-            """
-        
-        return target_text.strip()
-
-    def _find_text_position(self, target_text: str, document_structure: Optional[Dict[str, str]] = None) -> Optional[Tuple[int, int]]:
-        """
-        対象テキストの位置を特定する
-
-        Args:
-            target_text (str): 検索対象のテキスト
-            document_structure (Optional[Dict[str, str]]): 文書構造。Noneの場合は空の辞書を使用
-
-        Returns:
-            Optional[Tuple[int, int]]: テキストの開始位置と終了位置のタプル。見つからない場合はNone
-        """
-        try:
-            if not target_text:
-                self.logger.warning("検索対象のテキストが空です")
-                return None
-
-            # document_structureが指定されていない場合は空の辞書を使用
-            doc_structure = document_structure or {}
-            
-            # 各セクションごとに位置を計算
-            current_position = 0
-            
-            # サマリーセクションの処理
-            summary = doc_structure.get("summary", "").strip()
-            if summary:
-                if target_text in summary:
-                    start_pos = summary.find(target_text)
-                    return (current_position + start_pos, current_position + start_pos + len(target_text))
-                current_position += len(summary) + 2  # 改行文字分を加算
-            
-            # ストーリーセクションの処理
-            story = doc_structure.get("story", "").strip()
-            if story:
-                if target_text in story:
-                    start_pos = story.find(target_text)
-                    return (current_position + start_pos, current_position + start_pos + len(target_text))
-                current_position += len(story) + 2
-            
-            # 本文セクションの処理
-            body = doc_structure.get("body", "").strip()
-            if body:
-                if target_text in body:
-                    start_pos = body.find(target_text)
-                    return (current_position + start_pos, current_position + start_pos + len(target_text))
-            
-            self.logger.warning(f"テキスト '{target_text[:50]}...' が文書内で見つかりませんでした")
-            return None
-            
-        except Exception as e:
-            self.logger.error(f"テキスト位置の特定中にエラーが発生: {str(e)}")
-            return None
-
-    def _get_category_name(self, category_id: str) -> str:
-        """
-        カテゴリIDに対応する表示名を取得
-
-        Args:
-            category_id (str): カテゴリID
-
-        Returns:
-            str: カテゴリの表示名。未知のカテゴリIDの場合はIDをそのまま返す
-        """
-        try:
-            return CRITERIA_MAPPING[category_id].display_name
-        except KeyError:
-            self.logger.warning(f"未知のカテゴリID: {category_id}")
-            return category_id
 
     def _verify_text_exists(self, target_text: str, document_structure: Dict[str, str]) -> bool:
         """
@@ -665,16 +511,38 @@ class EvaluationService:
         applicable_to: List[str],
         document_structure: Dict[str, str]
     ) -> List[EvaluationResult]:
+        """
+        評価テキストを解析して評価結果のリストを生成する
+
+        Args:
+            evaluation_text (str): 評価テキスト
+            criteria_id (str): 評価基準ID
+            priority (int): 優先度
+            applicable_to (List[str]): 適用対象
+            document_structure (Dict[str, str]): 文書構造
+
+        Returns:
+            List[EvaluationResult]: 評価結果のリスト
+        """
         try:
             self.logger.debug(f"\n=== 評価テキストの解析開始: {criteria_id} ===")
             self.logger.debug(f"評価テキスト:\n{evaluation_text}")
 
-            # 「問題なし」の場合の処理
+            # "問題なし"の場合の処理
             if "問題なし" in evaluation_text:
                 self.logger.debug(f"{criteria_id}: 問題なしと判定")
                 result = EvaluationResult(
-                    criteria_id=criteria_id,
-                    category=criteria_id,  # カテゴリIDを設定
+                    category_id=criteria_id,
+                    category_name=self._get_category_name(criteria_id),
+                    priority=priority,
+                    locations=[{
+                        "location": "全体",
+                        "comments": [{
+                            "criteria_id": criteria_id,
+                            "content": "• 問題は見つかりませんでした\n• 評価基準を満たしています",
+                            "score": 1.0
+                        }]
+                    }],
                     score=1.0,
                     feedback="• 問題は見つかりませんでした\n• 評価基準を満たしています",
                     target_text="",
@@ -689,13 +557,9 @@ class EvaluationService:
             
             if not sections:
                 self.logger.warning("評価結果のセクションが見つかりません")
-                return [EvaluationResult(
-                    criteria_id=criteria_id,
-                    category=criteria_id,  # カテゴリIDを設定
-                    score=0.5,
-                    feedback="• 評価結果が不明確です\n• 該当箇所の評価を再度実行してください",
-                    target_text="",
-                    position=None
+                return [self._create_error_evaluation(
+                    criteria_id,
+                    "評価結果のセクションが見つかりません"
                 )]
             
             results = []
@@ -722,148 +586,110 @@ class EvaluationService:
                 
                 # 問題概要の追加
                 if "問題あり：" in section:
-                    problem_summary = section.split("問題あり：")[1].split("\n")[0].strip()
-                    feedback_parts.append(f"【{severity}】{problem_summary}")
+                    problem_desc = section.split("問題あり：")[1].split("\n")[0].strip()
+                    feedback_parts.append(f"• {problem_desc}")
 
-                # 問題点の追加
-                if "問題点：" in section:
-                    points = section.split("問題点：")[1].split("改善提案：")[0]
-                    points = [p.strip("- ").strip() for p in points.split("\n") if p.strip() and p.strip("- ")]
-                    if points:
-                        feedback_parts.append("【問題点】")
-                        feedback_parts.extend(points)
+                # 詳細な説明の追加
+                if "説明：" in section:
+                    explanation = section.split("説明：")[1].split("\n")[0].strip()
+                    feedback_parts.append(f"• {explanation}")
 
                 # 改善提案の追加
-                if "改善提案：" in section:
-                    suggestions = section.split("改善提案：")[1].split("---")[0]
-                    suggestions = [s.strip("- ").strip() for s in suggestions.split("\n") if s.strip() and s.strip("- ")]
-                    if suggestions:
-                        feedback_parts.append("【改善提案】")
-                        feedback_parts.extend(suggestions)
+                if "改善案：" in section:
+                    suggestions = section.split("改善案：")[1].split("\n")[0].strip()
+                    feedback_parts.append(f"• 改善提案: {suggestions}")
 
                 # スコアの計算
-                issue_weights = {"重大": 0.6, "中程度": 0.3, "軽微": 0.1}
-                score = max(0.0, 1.0 - issue_weights[severity])
+                score = 1.0  # デフォルト値
+                if severity == "重大":
+                    score = 0.3
+                elif severity == "中程度":
+                    score = 0.6
+                elif severity == "軽微":
+                    score = 0.8
 
                 # 位置情報の取得
-                position = self._find_text_position(target_text, document_structure) if target_text else None
+                position = None
+                if target_text:
+                    position = self._find_text_position(target_text, document_structure)
+                    self.logger.debug(f"位置情報: {position}")
 
+                # フィードバックの結合
+                feedback = "\n".join(feedback_parts)
+                self.logger.debug(f"生成されたフィードバック:\n{feedback}")
+
+                # 評価結果の生成
                 result = EvaluationResult(
-                    criteria_id=criteria_id,
-                    category=criteria_id,  # カテゴリIDを設定
+                    category_id=criteria_id,
+                    category_name=self._get_category_name(criteria_id),
+                    priority=priority,
+                    locations=[{
+                        "location": target_text or "全体",
+                        "comments": [{
+                            "criteria_id": criteria_id,
+                            "content": feedback,
+                            "score": score
+                        }]
+                    }],
                     score=score,
-                    feedback="\n".join(feedback_parts) if feedback_parts else "問題は見つかりませんでした",
+                    feedback=feedback,
                     target_text=target_text,
-                    position=Position(start=position[0], end=position[1]) if position else None
+                    position=position
                 )
-                self.logger.debug(f"セクション {i} の評価結果:\n{json.dumps(result.dict(), ensure_ascii=False, indent=2)}")
                 results.append(result)
 
-            if not results:
-                self.logger.warning("評価結果が生成されませんでした")
-                return [EvaluationResult(
-                    criteria_id=criteria_id,
-                    category=criteria_id,  # カテゴリIDを設定
-                    score=0.5,
-                    feedback="• 評価結果を生成できませんでした\n• 該当箇所の評価を再度実行してください",
-                    target_text="",
-                    position=None
-                )]
-
-            self.logger.debug(f"\n=== 評価テキストの解析完了 ===")
-            self.logger.debug(f"生成された評価結果数: {len(results)}")
             return results
 
         except Exception as e:
-            self.logger.error(f"評価テキストの解析中にエラーが発生: {str(e)}", exc_info=True)
-            return [EvaluationResult(
-                criteria_id=criteria_id,
-                category=criteria_id,  # カテゴリIDを設定
-                score=0.0,
-                feedback="• 評価中にエラーが発生しました\n• 該当箇所の評価を再度実行してください",
-                target_text="",
-                position=None
+            self.logger.error(f"評価テキストのパース中にエラー発生: {str(e)}")
+            return [self._create_error_evaluation(
+                criteria_id,
+                f"評価結果の解析に失敗しました: {str(e)}"
             )]
 
     def calculate_average_score(self, evaluations: List[Dict[str, Any]]) -> float:
         """
         評価結果の平均スコアを計算する
-
+        
         Args:
             evaluations (List[Dict[str, Any]]): 評価結果のリスト
-
+            
         Returns:
-            float: 平均スコア（0-1の範囲）
+            float: 平均スコア（0.0-1.0の範囲）
         """
-        try:
-            self.logger.debug("\n=== スコア計算開始 ===")
-            self.logger.debug(f"評価結果数: {len(evaluations)}")
-            
-            if not evaluations:
-                self.logger.warning("評価結果が空のため、スコアは0.0とします")
-                return 0.0
-            
-            # カテゴリごとの重み付け
-            category_weights = {
-                'FULL_TEXT_RHETORIC': 1.0,      # 文章全体の修辞
-                'SUMMARY_LOGIC_FLOW': 1.2,      # サマリーの論理展開
-                'SUMMARY_INTERNAL_LOGIC': 1.1,   # サマリーの内部論理
-                'SUMMARY_STORY_LOGIC': 1.2,      # サマリーとストーリーの論理
-                'STORY_INTERNAL_LOGIC': 1.1,     # ストーリーの内部論理
-                'DETAIL_RHETORIC': 0.8           # 詳細の修辞
-            }
-            
-            # カテゴリごとのスコアを集計
-            category_scores = {}
-            category_counts = {}
-            
-            for eval in evaluations:
-                if isinstance(eval.get("score"), (int, float)):
-                    category_id = eval.get("categoryId", "unknown")
-                    score = float(eval["score"])
-                    
-                    if category_id not in category_scores:
-                        category_scores[category_id] = 0.0
-                        category_counts[category_id] = 0
-                    
-                    category_scores[category_id] += score
-                    category_counts[category_id] += 1
-            
-            # カテゴリごとの平均スコアを計算
-            weighted_scores = []
-            total_weight = 0.0
-            
-            for category_id, total_score in category_scores.items():
-                count = category_counts[category_id]
-                if count > 0:
-                    avg_score = total_score / count
-                    weight = category_weights.get(category_id, 1.0)
-                    weighted_scores.append(avg_score * weight)
-                    total_weight += weight
-            
-            # 重み付き平均を計算
-            if total_weight > 0:
-                final_score = sum(weighted_scores) / total_weight
-                self.logger.debug(f"計算された最終スコア: {final_score}")
-                return min(max(final_score, 0.0), 1.0)
-            
-            self.logger.warning("有効なスコアが見つからないため、スコアは0.0とします")
+        if not evaluations:
+            return 0.0
+        
+        valid_scores = []
+        total_evaluations = len(evaluations)
+        error_count = 0
+        
+        for eval in evaluations:
+            if eval.get('error'):
+                error_count += 1
+                continue
+                
+            score = eval.get('score', 0.0)
+            if isinstance(score, (int, float)):
+                valid_scores.append(float(score))
+        
+        # すべての評価がエラーの場合は0.0を返す
+        if error_count == total_evaluations:
             return 0.0
             
-        except Exception as e:
-            self.logger.error(f"スコア計算中にエラーが発生: {str(e)}")
-            return 0.0
+        # エラー以外の評価の平均値を計算
+        return float(sum(valid_scores) / len(valid_scores)) if valid_scores else 0.0
 
     def _calculate_category_score(self, evaluations: List[Dict[str, Any]], category_info: CriteriaInfo) -> Dict[str, Any]:
         """
         カテゴリごとの評価スコアを計算する
-
+        
         Args:
-            evaluations (List[Dict[str, Any]]): カテゴリの評価結果リスト
+            evaluations (List[Dict[str, Any]]): カテゴリ内の評価結果
             category_info (CriteriaInfo): カテゴリ情報
-
+            
         Returns:
-            Dict[str, Any]: カテゴリスコアデータ
+            Dict[str, Any]: カテゴリスコア情報
         """
         if not evaluations:
             return {
@@ -872,29 +698,32 @@ class EvaluationService:
                 "score": 0.0,
                 "judgment": "NG"
             }
-
-        # 重み付けを考慮したスコア計算
-        total_weight = 0.0
-        weighted_score = 0.0
-
-        for evaluation in evaluations:
-            criteria_id = evaluation["criteriaId"]
-            score = evaluation["score"]
-            weight = category_info.criteria_weights.get(criteria_id, 1.0)
-            
-            weighted_score += score * weight
-            total_weight += weight
-
-        if total_weight > 0:
-            final_score = weighted_score / total_weight
+        
+        valid_scores = []
+        total_evaluations = len(evaluations)
+        error_count = 0
+        
+        for eval in evaluations:
+            if eval.get('error'):
+                error_count += 1
+                continue
+                
+            score = eval.get('score', 0.0)
+            if isinstance(score, (int, float)):
+                valid_scores.append(float(score))
+        
+        # すべての評価がエラーの場合は0.0を返す
+        if error_count == total_evaluations:
+            average_score = 0.0
         else:
-            final_score = 0.0
-
+            # エラー以外の評価の平均値を計算
+            average_score = float(sum(valid_scores) / len(valid_scores)) if valid_scores else 0.0
+        
         return {
             "categoryId": category_info.id,
             "categoryName": category_info.display_name,
-            "score": round(final_score * 100, 1),
-            "judgment": "OK" if final_score >= 0.8 else "NG"
+            "score": average_score,
+            "judgment": "OK" if average_score >= 0.8 else "NG"
         }
 
     def _create_evaluation_result(self, category: str, score: float, feedback: str, text_position: Optional[Tuple[int, int]] = None) -> EvaluationResult:
@@ -917,7 +746,7 @@ class EvaluationService:
             score=score,
             feedback=feedback,
             position=position
-        )
+        ) 
 
     def _generate_evaluation_prompt(self, criteria: Dict[str, Any], document_structure: Dict[str, str]) -> str:
         # Implementation of _generate_evaluation_prompt method
@@ -927,10 +756,95 @@ class EvaluationService:
         # Implementation of _parse_evaluation_response method
         pass
 
-    def _parse_evaluation_text(self, evaluation_text: str, criteria_id: str, priority: int, applicable_to: List[str], document_structure: Dict[str, str]) -> List[EvaluationResult]:
-        # Implementation of _parse_evaluation_text method
-        pass
+    async def _prepare_evaluation_messages(self, criteria_id: str, target_text: str) -> List[Dict[str, str]]:
+        """
+        評価用のメッセージを準備する
 
-    def _parse_evaluation_response(self, response: Dict[str, Any], category_id: str, criteria_id: str) -> EvaluationResult:
-        # Implementation of _parse_evaluation_response method
-        pass 
+        Args:
+            criteria_id (str): 評価基準ID
+            target_text (str): 評価対象テキスト
+
+        Returns:
+            List[Dict[str, str]]: 評価用メッセージのリスト
+        """
+        try:
+            self.logger.debug(f"\n=== 評価メッセージの準備開始 ===")
+            self.logger.debug(f"評価基準ID: {criteria_id}")
+            self.logger.debug(f"評価対象テキスト長: {len(target_text)}")
+
+            if not target_text:
+                self.logger.error("評価対象テキストが空です")
+                raise ValueError("評価対象テキストが空です")
+
+            # 評価基準を取得
+            criteria = next(
+                (c for c in EVALUATION_CRITERIA if c["name"] == criteria_id),
+                None
+            )
+            
+            if not criteria:
+                self.logger.error(f"評価基準 {criteria_id} が見つかりません")
+                raise ValueError(f"評価基準 {criteria_id} が見つかりません")
+
+            self.logger.debug(f"評価基準の説明: {criteria['description'][:100]}...")
+            self.logger.debug(f"評価プロンプトの使用: {criteria_id}")
+
+            # 評価用のメッセージを作成
+            messages = [
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+以下の評価基準とプロンプトに基づいて、提供されたテキストを評価し、結果を指定された形式で返してください。
+
+【評価基準】
+{criteria['description']}
+
+【評価プロンプト】
+{criteria['prompt']}
+
+【評価対象テキスト】
+{target_text}
+
+【出力形式】
+以下のJSON形式で出力してください：
+
+{{
+    "category": "{criteria_id}",
+    "score": 評価スコア（0から1の小数）,
+    "feedback": [
+        "評価コメント1",
+        "評価コメント2",
+        ...
+    ],
+    "target_text": "評価対象の具体的な文章（問題がある場合）",
+    "improvement_suggestions": [
+        "改善提案1",
+        "改善提案2",
+        ...
+    ]
+}}
+
+【注意事項】
+1. 評価結果は必ず上記のJSON形式で返してください
+2. scoreは0から1の小数値で、1が最高評価です
+3. 問題がない場合はscoreを1.0とし、feedbackに「問題なし」を含めてください
+4. target_textは問題がある場合のみ設定し、問題がない場合は空文字列としてください
+5. JSON形式を厳密に守り、余分な説明は含めないでください
+6. 評価プロンプトに記載された具体的な評価項目に基づいて評価を行ってください
+"""
+                }
+            ]
+            
+            self.logger.debug(f"評価メッセージを準備完了: 基準={criteria_id}, テキスト長={len(target_text)}")
+            self.logger.debug(f"メッセージ数: {len(messages)}")
+            return messages
+            
+        except Exception as e:
+            self.logger.error(f"評価メッセージの準備中にエラーが発生: {str(e)}")
+            self.logger.error(f"エラータイプ: {type(e).__name__}")
+            self.logger.error(f"エラー詳細: {traceback.format_exc()}")
+            raise ValueError(f"評価メッセージの準備に失敗: {str(e)}") 

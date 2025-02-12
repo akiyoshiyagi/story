@@ -36,52 +36,42 @@
         <div class="category-scores">
             <h2>カテゴリ別評価</h2>
             
-            <!-- 文章全体の修辞 -->
-            <div class="category-score">
-                <div class="category-header">
+            <div class="category-buttons">
+                <!-- 文章全体の修辞 -->
+                <button id="btn-full-text-rhetoric" class="category-button">
                     <span class="category-title">文章全体の修辞</span>
                     <span id="judgment-full-text-rhetoric" class="judgment"></span>
-                </div>
-            </div>
+                </button>
 
-            <!-- サマリーの論理展開 -->
-            <div class="category-score">
-                <div class="category-header">
+                <!-- サマリーの論理展開 -->
+                <button id="btn-summary-logic-flow" class="category-button">
                     <span class="category-title">サマリーの論理展開</span>
                     <span id="judgment-summary-logic-flow" class="judgment"></span>
-                </div>
-            </div>
+                </button>
 
-            <!-- サマリーの内部論理 -->
-            <div class="category-score">
-                <div class="category-header">
+                <!-- サマリーの内部論理 -->
+                <button id="btn-summary-internal-logic" class="category-button">
                     <span class="category-title">サマリーの内部論理</span>
                     <span id="judgment-summary-internal-logic" class="judgment"></span>
-                </div>
-            </div>
+                </button>
 
-            <!-- サマリーとストーリーの論理 -->
-            <div class="category-score">
-                <div class="category-header">
+                <!-- サマリーとストーリーの論理 -->
+                <button id="btn-summary-story-logic" class="category-button">
                     <span class="category-title">サマリーとストーリーの論理</span>
                     <span id="judgment-summary-story-logic" class="judgment"></span>
-                </div>
-            </div>
+                </button>
 
-            <!-- ストーリーの内部論理 -->
-            <div class="category-score">
-                <div class="category-header">
+                <!-- ストーリーの内部論理 -->
+                <button id="btn-story-internal-logic" class="category-button">
                     <span class="category-title">ストーリーの内部論理</span>
                     <span id="judgment-story-internal-logic" class="judgment"></span>
-                </div>
-            </div>
+                </button>
 
-            <!-- 詳細の修辞 -->
-            <div class="category-score">
-                <div class="category-header">
+                <!-- 詳細の修辞 -->
+                <button id="btn-detail-rhetoric" class="category-button">
                     <span class="category-title">詳細の修辞</span>
                     <span id="judgment-detail-rhetoric" class="judgment"></span>
-                </div>
+                </button>
             </div>
         </div>
 
@@ -96,6 +86,14 @@
             </button>
         </div>
     </main>
+
+    <!-- アプリケーションスクリプト -->
+    <script type="text/javascript">
+        // Office.jsの初期化完了を待つ
+        Office.initialize = function (reason) {
+            console.log('Office.js initialized');
+        };
+    </script>
 </body>
 
 </html>

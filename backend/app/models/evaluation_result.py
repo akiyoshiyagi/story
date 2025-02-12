@@ -36,6 +36,7 @@ class EvaluationResult(BaseModel):
     locations: List[LocationComments]
     score: float
     feedback: str
+    target_text: str  # 評価対象のテキスト
     position: Optional[Position] = None  # 問題のある箇所の位置情報
     details: Optional[List[Dict]] = None
 
