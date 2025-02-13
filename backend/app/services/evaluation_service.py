@@ -649,36 +649,48 @@ class EvaluationService:
 
     def calculate_average_score(self, evaluations: List[Dict[str, Any]]) -> float:
         """
-        評価結果の平均スコアを計算する
+        評価結果から総合スコアを計算する
         
         Args:
             evaluations (List[Dict[str, Any]]): 評価結果のリスト
             
         Returns:
-            float: 平均スコア（0.0-1.0の範囲）
+            float: 総合スコア（0-1の範囲）
         """
-        if not evaluations:
-            return 0.0
-        
-        valid_scores = []
-        total_evaluations = len(evaluations)
-        error_count = 0
-        
-        for eval in evaluations:
-            if eval.get('error'):
-                error_count += 1
-                continue
-                
-            score = eval.get('score', 0.0)
-            if isinstance(score, (int, float)):
-                valid_scores.append(float(score))
-        
-        # すべての評価がエラーの場合は0.0を返す
-        if error_count == total_evaluations:
-            return 0.0
+        try:
+            if not evaluations:
+                return 0.0
+
+            # 評価基準ごとのスコアを記録
+            criteria_scores = {}
             
-        # エラー以外の評価の平均値を計算
-        return float(sum(valid_scores) / len(valid_scores)) if valid_scores else 0.0
+            # コメントが生成された評価基準は0点、そうでない場合はmax_scoreを加算
+            for evaluation in evaluations:
+                criteria_id = evaluation.get('criteriaId')
+                if not criteria_id:
+                    continue
+                    
+                # コメントが生成された（問題が見つかった）場合は0点
+                if evaluation.get('feedback') and not evaluation.get('feedback').startswith('問題なし'):
+                    criteria_scores[criteria_id] = 0
+                else:
+                    # 問題がない場合は、その評価基準のmax_scoreを加算
+                    for criteria in EVALUATION_CRITERIA:
+                        if criteria['name'] == criteria_id:
+                            criteria_scores[criteria_id] = criteria['max_score']
+                            break
+
+            # 総合スコアを計算（単純な合計）
+            total_score = sum(criteria_scores.values())
+            
+            self.logger.debug(f"スコア計算: {criteria_scores}")
+            self.logger.debug(f"総合スコア: {total_score}")
+            
+            return total_score
+            
+        except Exception as e:
+            self.logger.error(f"スコア計算中にエラー: {str(e)}")
+            return 0.0
 
     def _calculate_category_score(self, evaluations: List[Dict[str, Any]], category_info: CriteriaInfo) -> Dict[str, Any]:
         """
@@ -699,25 +711,14 @@ class EvaluationService:
                 "judgment": "NG"
             }
         
-        valid_scores = []
-        total_evaluations = len(evaluations)
-        error_count = 0
+        # 有効なスコアの平均値を計算
+        valid_scores = [
+            float(eval.get('score', 0.0))
+            for eval in evaluations
+            if not eval.get('error') and isinstance(eval.get('score'), (int, float))
+        ]
         
-        for eval in evaluations:
-            if eval.get('error'):
-                error_count += 1
-                continue
-                
-            score = eval.get('score', 0.0)
-            if isinstance(score, (int, float)):
-                valid_scores.append(float(score))
-        
-        # すべての評価がエラーの場合は0.0を返す
-        if error_count == total_evaluations:
-            average_score = 0.0
-        else:
-            # エラー以外の評価の平均値を計算
-            average_score = float(sum(valid_scores) / len(valid_scores)) if valid_scores else 0.0
+        average_score = sum(valid_scores) / len(valid_scores) if valid_scores else 0.0
         
         return {
             "categoryId": category_info.id,

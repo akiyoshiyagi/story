@@ -31,31 +31,24 @@ interface EvaluationComment {
 // カテゴリIDとHTML要素のIDのマッピング
 const CATEGORY_ID_MAPPING: Record<string, {
     buttonId: string;
-    judgmentId: string;
 }> = {
     'FULL_TEXT_RHETORIC': {
-        buttonId: 'btn-full-text-rhetoric',
-        judgmentId: 'judgment-full-text-rhetoric'
+        buttonId: 'btn-full-text-rhetoric'
     },
     'SUMMARY_LOGIC_FLOW': {
-        buttonId: 'btn-summary-logic-flow',
-        judgmentId: 'judgment-summary-logic-flow'
+        buttonId: 'btn-summary-logic-flow'
     },
     'SUMMARY_INTERNAL_LOGIC': {
-        buttonId: 'btn-summary-internal-logic',
-        judgmentId: 'judgment-summary-internal-logic'
+        buttonId: 'btn-summary-internal-logic'
     },
     'SUMMARY_STORY_LOGIC': {
-        buttonId: 'btn-summary-story-logic',
-        judgmentId: 'judgment-summary-story-logic'
+        buttonId: 'btn-summary-story-logic'
     },
     'STORY_INTERNAL_LOGIC': {
-        buttonId: 'btn-story-internal-logic',
-        judgmentId: 'judgment-story-internal-logic'
+        buttonId: 'btn-story-internal-logic'
     },
     'DETAIL_RHETORIC': {
-        buttonId: 'btn-detail-rhetoric',
-        judgmentId: 'judgment-detail-rhetoric'
+        buttonId: 'btn-detail-rhetoric'
     }
 };
 
@@ -102,25 +95,20 @@ export class UIManager {
     private loadingSpinner: HTMLElement;
     private statusElement: HTMLElement;
     private logger: Console = console;
-    private documentStructure: {
-        indentLevels: number[];
-        paragraphTypes: Map<number, 'summary' | 'story' | 'body' | 'detail'>;
-        indentDistribution: Map<number, number>;
-    } = {
-        indentLevels: [],
-        paragraphTypes: new Map(),
-        indentDistribution: new Map()
-    };
-
+    // 評価基準情報を保持
+    private evaluationCriteria: Map<string, string[]> = new Map();
     // コメントの一時保存用マップ
     private commentStore: { [key: string]: CommentData[] } = {};
+    // 現在選択されているカテゴリ
+    private selectedCategory: string | null = null;
 
     constructor() {
         this.checkButton = document.getElementById('check-button') as HTMLButtonElement;
         this.loadingSpinner = document.getElementById('loading-spinner') as HTMLElement;
         this.statusElement = document.getElementById('status') as HTMLElement;
 
-        this.initializeEventListeners();
+        // カテゴリボタンのイベントリスナーを初期化
+        this.initializeCategoryButtons();
     }
 
     /**
@@ -138,9 +126,6 @@ export class UIManager {
                 this.handleCheckDocument();
             }
         });
-
-        // カテゴリボタンのイベントリスナーを初期化
-        this.initializeCategoryButtons();
     }
 
     /**
@@ -179,50 +164,16 @@ export class UIManager {
     }
 
     // カテゴリボタンの初期化
-    private async initializeCategoryButtons(): Promise<void> {
-        try {
-            await Word.run(async (context) => {
-                // 現在のドキュメントの全てのコメントを取得
-                const body = context.document.body;
-                const paragraphs = body.paragraphs;
-                paragraphs.load("items");
-                await context.sync();
-
-                // 各段落のインデックスとコメントを取得
-                for (let i = 0; i < paragraphs.items.length; i++) {
-                    const paragraph = paragraphs.items[i];
-                    const range = paragraph.getRange();
-                    const comments = range.getComments();
-                    comments.load("items");
-                    await context.sync();
-
-                    if (comments.items.length > 0) {
-                        comments.items.forEach((comment: Word.Comment) => {
-                            const categoryId = this.getCategoryFromComment(comment);
-                            if (categoryId) {
-                                if (!this.commentStore[categoryId]) {
-                                    this.commentStore[categoryId] = [];
-                                }
-                                this.commentStore[categoryId].push({
-                                    content: comment.content || "",
-                                    paragraphIndex: i
-                                });
-                            }
-                        });
-                    }
-                }
-
-                // カテゴリボタンのイベントリスナーを設定
-                Object.keys(CATEGORY_ID_MAPPING).forEach(categoryId => {
-                    const button = document.getElementById(`btn-${categoryId}`);
-                    if (button) {
-                        button.addEventListener("click", () => this.toggleCategoryComments(categoryId));
-                    }
+    private initializeCategoryButtons(): void {
+        // カテゴリボタンのイベントリスナーを設定
+        Object.entries(CATEGORY_ID_MAPPING).forEach(([categoryId, mapping]) => {
+            const button = document.getElementById(mapping.buttonId);
+            if (button) {
+                button.addEventListener("click", () => {
+                    this.toggleCategoryComments(categoryId);
                 });
-            });
-        } catch (error) {
-            console.error("Error initializing category buttons:", error);
-        }
+            }
+        });
     }
 
     // コメントからカテゴリIDを取得
@@ -238,17 +189,101 @@ export class UIManager {
         return null;
     }
 
-    // カテゴリのコメント表示を切り替え
-    private async toggleCategoryComments(selectedCategoryId: string): Promise<void> {
+    // コメントからEVALUATION_CRITERIAを取得
+    private getEvaluationCriteriaFromComment(comment: Word.Comment): string | null {
+        if (!comment || !comment.content) return null;
+        const content = comment.content;
+        
+        // コメントから評価観点を抽出
+        const match = content.match(/【評価観点】(.*?)(\n|$)/);
+        if (match && match[1]) {
+            return match[1].trim();
+        }
+        return null;
+    }
+
+    /**
+     * 位置情報からパラグラフインデックスを取得
+     */
+    private async getParagraphIndex(targetText: string | undefined): Promise<number> {
+        if (!targetText) return 0;
+
+        try {
+            const result = await Word.run(async (context) => {
+                const body = context.document.body;
+                const paragraphs = body.paragraphs;
+                paragraphs.load("text");
+                await context.sync();
+
+                // 対象のテキストを含むパラグラフを検索
+                for (let i = 0; i < paragraphs.items.length; i++) {
+                    const paragraphText = paragraphs.items[i].text.trim();
+                    if (paragraphText.includes(targetText.trim())) {
+                        return i;
+                    }
+                }
+                return 0; // 見つからない場合は先頭のパラグラフを使用
+            });
+            return result;
+        } catch (error) {
+            console.error("Error finding paragraph index:", error);
+            return 0;
+        }
+    }
+
+    /**
+     * レビュー結果を処理する
+     */
+    private async handleReviewResponse(response: ReviewResponse): Promise<void> {
+        try {
+            // コメントストアをクリア
+            this.commentStore = {};
+            this.selectedCategory = null;
+            
+            // 評価結果からコメントを保存
+            if (response.evaluations) {
+                for (const evaluation of response.evaluations) {
+                    if (!evaluation.feedback.includes('問題なし')) {
+                        const categoryId = evaluation.categoryId;
+                        if (!this.commentStore[categoryId]) {
+                            this.commentStore[categoryId] = [];
+                        }
+                        
+                        const paragraphIndex = await this.getParagraphIndex(evaluation.location);
+                        this.commentStore[categoryId].push({
+                            content: this.formatComment(evaluation),
+                            paragraphIndex: paragraphIndex
+                        });
+                    }
+                }
+            }
+
+            // 評価結果の表示を更新
+            this.updateEvaluationDisplay(response);
+
+            // すべてのコメントを一旦削除
+            await this.clearAllComments();
+            
+            // ボタンの状態を更新
+            this.updateCategoryButtonStates();
+            
+        } catch (error) {
+            console.error('Error handling review response:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * すべてのコメントを削除
+     */
+    private async clearAllComments(): Promise<void> {
         try {
             await Word.run(async (context) => {
-                // 全てのコメントを非表示
                 const body = context.document.body;
                 const paragraphs = body.paragraphs;
                 paragraphs.load("items");
                 await context.sync();
 
-                // 既存のコメントを削除
                 for (const paragraph of paragraphs.items) {
                     const range = paragraph.getRange();
                     const comments = range.getComments();
@@ -258,55 +293,25 @@ export class UIManager {
                     comments.items.forEach((comment: Word.Comment) => comment.delete());
                 }
                 await context.sync();
-
-                // 選択されたカテゴリのコメントのみを表示
-                const selectedComments = this.commentStore[selectedCategoryId];
-                if (selectedComments) {
-                    selectedComments.forEach(({ content, paragraphIndex }) => {
-                        if (content && paragraphIndex < paragraphs.items.length) {
-                            const paragraph = paragraphs.items[paragraphIndex];
-                            const range = paragraph.getRange();
-                            range.insertComment(content);
-                        }
-                    });
-                }
-                await context.sync();
             });
         } catch (error) {
-            console.error("Error toggling category comments:", error);
+            console.error("Error clearing comments:", error);
         }
     }
 
     /**
-     * ローディング状態を設定する
+     * コメントをフォーマットする
      */
-    private setLoading(isLoading: boolean): void {
-        this.loadingSpinner.style.display = isLoading ? 'block' : 'none';
-            this.checkButton.disabled = isLoading;
-    }
+    private formatComment(evaluation: any): string {
+        const parts = [
+            `【評価観点】${evaluation.criteriaId}`
+        ];
 
-    /**
-     * ステータスメッセージを設定する
-     */
-    private setStatus(message: string): void {
-        this.statusElement.textContent = message;
-    }
-
-    /**
-     * レビュー結果を処理する
-     */
-    private async handleReviewResponse(response: ReviewResponse): Promise<void> {
-        try {
-            // 評価結果の表示を更新
-            this.updateEvaluationDisplay(response);
-            
-            // カテゴリボタンの状態を更新
-            await this.updateCategoryButtons(response);
-            
-        } catch (error) {
-            console.error('Error handling review response:', error);
-            throw error;
+        if (evaluation.feedback) {
+            parts.push(evaluation.feedback);
         }
+
+        return parts.join('\n');
     }
 
     /**
@@ -326,16 +331,78 @@ export class UIManager {
         }
     }
 
+    // カテゴリのコメント表示を切り替え
+    private async toggleCategoryComments(selectedCategoryId: string): Promise<void> {
+        try {
+            // 既存のコメントを削除
+            await this.clearAllComments();
+
+            // 同じカテゴリが選択された場合は選択解除して終了
+            if (this.selectedCategory === selectedCategoryId) {
+                this.selectedCategory = null;
+                this.updateCategoryButtonStates();
+                return;
+            }
+
+            // 新しいカテゴリを選択
+            this.selectedCategory = selectedCategoryId;
+
+            // 選択されたカテゴリのコメントを表示
+            await Word.run(async (context) => {
+                const body = context.document.body;
+                const paragraphs = body.paragraphs;
+                paragraphs.load("items");
+                await context.sync();
+
+                const selectedComments = this.commentStore[selectedCategoryId];
+                if (selectedComments) {
+                    for (const { content, paragraphIndex } of selectedComments) {
+                        if (content && paragraphIndex < paragraphs.items.length) {
+                            const paragraph = paragraphs.items[paragraphIndex];
+                            const range = paragraph.getRange();
+                            range.insertComment(content);
+                        }
+                    }
+                }
+                await context.sync();
+            });
+
+            // ボタンの表示状態を更新
+            this.updateCategoryButtonStates();
+            
+        } catch (error) {
+            console.error("Error toggling category comments:", error);
+        }
+    }
+
     /**
-     * カテゴリボタンの状態を更新する
+     * カテゴリボタンの表示状態を更新
      */
-    private async updateCategoryButtons(response: ReviewResponse): Promise<void> {
-        // カテゴリごとの評価結果を表示
-        response.categoryScores?.forEach(score => {
-            const judgmentElement = document.getElementById(CATEGORY_ID_MAPPING[score.categoryId]?.judgmentId);
-            if (judgmentElement) {
-                judgmentElement.textContent = `${Math.round(score.score * 100)}点`;
+    private updateCategoryButtonStates(): void {
+        Object.entries(CATEGORY_ID_MAPPING).forEach(([categoryId, mapping]) => {
+            const button = document.getElementById(mapping.buttonId);
+            if (button) {
+                if (categoryId === this.selectedCategory) {
+                    button.classList.add('selected');
+                } else {
+                    button.classList.remove('selected');
+                }
             }
         });
+    }
+
+    /**
+     * ローディング状態を設定する
+     */
+    private setLoading(isLoading: boolean): void {
+        this.loadingSpinner.style.display = isLoading ? 'block' : 'none';
+            this.checkButton.disabled = isLoading;
+    }
+
+    /**
+     * ステータスメッセージを設定する
+     */
+    private setStatus(message: string): void {
+        this.statusElement.textContent = message;
     }
 } 
