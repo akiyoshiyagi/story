@@ -650,46 +650,67 @@ class EvaluationService:
     def calculate_average_score(self, evaluations: List[Dict[str, Any]]) -> float:
         """
         評価結果から総合スコアを計算する
+
+        Args:
+            evaluations: 評価結果のリスト
+
+        Returns:
+            float: 総合スコア
+        """
+        if not evaluations:
+            logging.warning("評価結果が空のため、スコアは0とします")
+            return 0.0
+
+        logging.info("\n=== スコア計算開始 ===")
+        total_score = 0.0
+        processed_criteria = set()  # 重複評価を防ぐための集合
+
+        for evaluation in evaluations:
+            criteria_id = evaluation.get('criteriaId')
+            if not criteria_id or criteria_id in processed_criteria:
+                continue
+
+            processed_criteria.add(criteria_id)
+            max_score = self._get_criteria_max_score(criteria_id)
+
+            # フィードバックの有無でスコアを決定
+            # フィードバックに「問題なし」が含まれている場合はmax_score、それ以外は0点
+            feedback = evaluation.get('feedback', '')
+            score = max_score if '問題なし' in feedback else 0.0
+
+            logging.info(f"評価基準: {criteria_id}")
+            logging.info(f"最大スコア: {max_score}")
+            logging.info(f"付与スコア: {score}")
+            logging.info(f"フィードバック: {feedback[:100]}...")
+
+            total_score += score
+
+        logging.info(f"総合スコア: {total_score}")
+        return total_score
+
+    def _get_criteria_max_score(self, criteria_id: str) -> float:
+        """
+        評価基準のmax_scoreを取得する
         
         Args:
-            evaluations (List[Dict[str, Any]]): 評価結果のリスト
+            criteria_id: 評価基準ID
             
         Returns:
-            float: 総合スコア（0-1の範囲）
+            float: 評価基準のmax_score
         """
         try:
-            if not evaluations:
-                return 0.0
-
-            # 評価基準ごとのスコアを記録
-            criteria_scores = {}
+            from ..prompt_template.prompt import EVALUATION_CRITERIA
             
-            # コメントが生成された評価基準は0点、そうでない場合はmax_scoreを加算
-            for evaluation in evaluations:
-                criteria_id = evaluation.get('criteriaId')
-                if not criteria_id:
-                    continue
-                    
-                # コメントが生成された（問題が見つかった）場合は0点
-                if evaluation.get('feedback') and not evaluation.get('feedback').startswith('問題なし'):
-                    criteria_scores[criteria_id] = 0
-                else:
-                    # 問題がない場合は、その評価基準のmax_scoreを加算
-                    for criteria in EVALUATION_CRITERIA:
-                        if criteria['name'] == criteria_id:
-                            criteria_scores[criteria_id] = criteria['max_score']
-                            break
-
-            # 総合スコアを計算（単純な合計）
-            total_score = sum(criteria_scores.values())
+            # EVALUATION_CRITERIAから該当する評価基準を検索
+            for criteria in EVALUATION_CRITERIA:
+                if criteria["name"] == criteria_id:
+                    return float(criteria.get("max_score", 0.0))
             
-            self.logger.debug(f"スコア計算: {criteria_scores}")
-            self.logger.debug(f"総合スコア: {total_score}")
-            
-            return total_score
+            logging.warning(f"評価基準 {criteria_id} のmax_scoreが見つかりません")
+            return 0.0
             
         except Exception as e:
-            self.logger.error(f"スコア計算中にエラー: {str(e)}")
+            logging.error(f"max_score取得中にエラー: {str(e)}")
             return 0.0
 
     def _calculate_category_score(self, evaluations: List[Dict[str, Any]], category_info: CriteriaInfo) -> Dict[str, Any]:

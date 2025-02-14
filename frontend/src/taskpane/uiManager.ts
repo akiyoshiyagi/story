@@ -322,16 +322,35 @@ export class UIManager {
      * 評価結果の表示を更新する
      */
     private updateEvaluationDisplay(response: ReviewResponse): void {
-        // 総合評価スコアの表示を更新
+        // 総合評価スコアの表示を更新（計算された合計スコアをそのまま表示）
         const totalScoreElement = document.getElementById('total-score');
         if (totalScoreElement) {
-            totalScoreElement.textContent = `${Math.round(response.totalScore * 100)}点`;
+            totalScoreElement.textContent = `${response.totalScore}点`;
         }
 
-        // 総合判定の表示を更新
+        // 総合判定の表示を更新（80点以上でOK、未満でNG）
         const totalJudgmentElement = document.getElementById('total-judgment');
         if (totalJudgmentElement) {
-            totalJudgmentElement.textContent = response.totalJudgment || '判定なし';
+            const judgment = response.totalScore >= 80 ? 'OK' : 'NG';
+            totalJudgmentElement.textContent = judgment;
+        }
+
+        // デバッグ情報の出力
+        console.log('\n=== スコア計算結果 ===');
+        console.log(`総合スコア: ${response.totalScore}点`);
+        console.log(`総合判定: ${response.totalScore >= 80 ? 'OK' : 'NG'}`);
+        if (response.evaluations) {
+            console.log('各評価基準のスコア:');
+            const processedCriteria = new Set();
+            response.evaluations.forEach(evaluation => {
+                // 重複評価を防ぐ
+                if (!processedCriteria.has(evaluation.criteriaId)) {
+                    processedCriteria.add(evaluation.criteriaId);
+                    // フィードバックに基づいてスコアを表示（「問題なし」の場合はmax_score、それ以外は0点）
+                    const score = evaluation.feedback.includes('問題なし') ? 'max_score' : '0';
+                    console.log(`- ${evaluation.criteriaId}: ${score}点`);
+                }
+            });
         }
     }
 

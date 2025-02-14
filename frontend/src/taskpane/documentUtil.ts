@@ -33,12 +33,12 @@ interface Evaluation {
 
 // カテゴリと評価基準のマッピング
 export const CATEGORY_CRITERIA_MAP: { [key: string]: string[] } = {
-    "FULL_TEXT_RHETORIC": ["最低限の修辞表現", "修辞表現"],
-    "SUMMARY_LOGIC_FLOW": ["前回の振り返りの有無", "SCQA有無", "転換の接続詞の重複利用"],
-    "SUMMARY_INTERNAL_LOGIC": ["接続詞の妥当性", "サマリーレイヤーに不適な接続詞の有無", "直前のサマリーとの論理的連続性"],
+    "FULL_TEXT_RHETORIC": ["最低限の修辞表現"],
+    "SUMMARY_LOGIC_FLOW": ["前回の振り返りの有無", "SCQA有無", "転換の接続詞の重複利用","接続詞の妥当性", "サマリーレイヤーに不適な接続詞の有無"],
+    "SUMMARY_INTERNAL_LOGIC": ["直前のサマリーとの論理的連続性"],
     "SUMMARY_STORY_LOGIC": ["メッセージレイヤーの逐次的展開性", "逐次的展開の評価", "根拠s, 詳細s⇔主張"],
-    "STORY_INTERNAL_LOGIC": ["接続詞の適切性", "転換の接続詞の二重利用", "無駄なナンバリングの回避"],
-    "DETAIL_RHETORIC": ["メッセージとボディの論理的整合性"]
+    "STORY_INTERNAL_LOGIC": ["接続詞の適切性", "転換の接続詞の二重利用", "無駄なナンバリングの回避", "メッセージとボディの論理的整合性"],
+    "DETAIL_RHETORIC": ["修辞表現"]
 };
 
 // カテゴリの日本語名マッピング

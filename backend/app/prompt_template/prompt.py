@@ -615,7 +615,7 @@ EVALUATION_CRITERIA = [
     {
         "name": "転換の接続詞の重複利用",
         "description": "転換を示す接続詞の重複使用を評価します。",
-        "max_score": 9.0,
+        "max_score": 7.0,
         "priority": 4,
         "applicable_to": ["FULL_SUMMARY"],
         "prompt": EVALUATION_CRITERIA_PROMPTS["転換の接続詞の重複利用"]
@@ -623,7 +623,7 @@ EVALUATION_CRITERIA = [
     {
         "name": "接続詞の妥当性",
         "description": "接続詞の使用が文脈に適しているかを評価します。",
-        "max_score": 5.0,
+        "max_score": 7.0,
         "priority": 5,
         "applicable_to": ["CONSECUTIVE_SUMMARY"],
         "prompt": EVALUATION_CRITERIA_PROMPTS["接続詞の妥当性"]
@@ -631,7 +631,7 @@ EVALUATION_CRITERIA = [
     {
         "name": "サマリーレイヤーに不適な接続詞の有無",
         "description": "サマリーレベルで不適切な接続詞の使用を評価します。",
-        "max_score": 5.0,
+        "max_score": 7.0,
         "priority": 6,
         "applicable_to": ["CONSECUTIVE_SUMMARY"],
         "prompt": EVALUATION_CRITERIA_PROMPTS["サマリーレイヤーに不適な接続詞の有無"]
@@ -639,7 +639,7 @@ EVALUATION_CRITERIA = [
     {
         "name": "直前のサマリーとの論理的連続性",
         "description": "前のサマリーとの論理的なつながりを評価します。",
-        "max_score": 5.0,
+        "max_score": 7.0,
         "priority": 7,
         "applicable_to": ["CONSECUTIVE_SUMMARY"],
         "prompt": EVALUATION_CRITERIA_PROMPTS["直前のサマリーとの論理的連続性"]
@@ -663,7 +663,7 @@ EVALUATION_CRITERIA = [
     {
         "name": "根拠s, 詳細s⇔主張",
         "description": "根拠や詳細から主張への論理的つながりを評価します。",
-        "max_score": 6.0,
+        "max_score": 7.0,
         "priority": 10,
         "applicable_to": ["SUMMARY_STORY_BLOCK"],
         "prompt": EVALUATION_CRITERIA_PROMPTS["根拠s, 詳細s⇔主張"]
@@ -671,7 +671,7 @@ EVALUATION_CRITERIA = [
     {
         "name": "接続詞の適切性",
         "description": "ストーリー内での接続詞の使用が適切かを評価します。",
-        "max_score": 4.0,
+        "max_score": 7.0,
         "priority": 11,
         "applicable_to": ["SUMMARY_WISE_STORY_BLOCK"],
         "prompt": EVALUATION_CRITERIA_PROMPTS["接続詞の適切性"]
@@ -679,7 +679,7 @@ EVALUATION_CRITERIA = [
     {
         "name": "転換の接続詞の二重利用",
         "description": "ストーリー内での転換を示す接続詞の重複使用を評価します。",
-        "max_score": 3.0,
+        "max_score": 7.0,
         "priority": 12,
         "applicable_to": ["SUMMARY_WISE_STORY_BLOCK"],
         "prompt": EVALUATION_CRITERIA_PROMPTS["転換の接続詞の二重利用"]
@@ -687,7 +687,7 @@ EVALUATION_CRITERIA = [
     {
         "name": "無駄なナンバリングの回避",
         "description": "不必要なナンバリングの使用を評価します。",
-        "max_score": 3.0,
+        "max_score": 7.0,
         "priority": 13,
         "applicable_to": ["SUMMARY_WISE_STORY_BLOCK"],
         "prompt": EVALUATION_CRITERIA_PROMPTS["無駄なナンバリングの回避"]
@@ -695,7 +695,7 @@ EVALUATION_CRITERIA = [
     {
         "name": "メッセージとボディの論理的整合性",
         "description": "メッセージとボディの論理的整合性を評価します。",
-        "max_score": 10.0,
+        "max_score": 7.0,
         "priority": 14,
         "applicable_to": ["STORY_WISE_BODY_BLOCK"],
         "prompt": EVALUATION_CRITERIA_PROMPTS["メッセージとボディの論理的整合性"]
@@ -703,7 +703,7 @@ EVALUATION_CRITERIA = [
     {
         "name": "修辞表現",
         "description": "文章全体の修辞表現の質を評価します。",
-        "max_score": 13.0,
+        "max_score": 7.0,
         "priority": 15,
         "applicable_to": ["FULL_SUMMARY_AND_STORY"],
         "prompt": EVALUATION_CRITERIA_PROMPTS["修辞表現"]
