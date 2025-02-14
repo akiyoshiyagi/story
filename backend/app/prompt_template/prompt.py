@@ -740,11 +740,11 @@ EVALUATION_PROMPT_TEMPLATE = """
 def get_evaluation_text(document_structure: dict, target_type: str) -> str:
     """
     評価対象範囲に応じたテキストを取得する
-
+    
     Args:
         document_structure (dict): 文書構造を表す辞書
         target_type (str): 評価対象範囲の種類
-
+    
     Returns:
         str: 評価対象テキスト
     """

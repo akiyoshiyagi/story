@@ -365,197 +365,236 @@ function getTargetTypeFromCategoryId(categoryId: string): string {
 export async function getDocumentStructure(): Promise<DocumentStructure> {
     try {
         return await Word.run(async (context) => {
-            // タイトルをヘッダーから取得
-            const sections = context.document.sections;
-            sections.load("items");
-            await context.sync();
-            
-            let title = "タイトルなし";
-            if (sections.items.length > 0) {
-                const firstSection = sections.items[0];
-                const header = firstSection.getHeader("Primary");
-                header.load("text");
+            try {
+                // 文書が開かれているか確認
+                const document = context.document;
+                document.load("body");
                 await context.sync();
-                
-                const headerText = header.text.trim();
-                if (headerText) {
-                    title = headerText;
-                }
-            }
+                console.log('文書の読み込みに成功しました');
 
-            // 文書全体のパラグラフを取得
-            const paragraphs = context.document.body.paragraphs;
-            paragraphs.load(["items", "text", "listItem", "listItem/level"]);
-            await context.sync();
-
-            // デバッグ情報の出力
-            console.log('=== 文書構造解析開始 ===');
-            console.log(`総段落数: ${paragraphs.items.length}`);
-
-            // 結果を格納する配列
-            const contents: StoryStructure[] = [];
-            let currentStructure: StoryStructure | null = null;
-            let currentStory: { story: string; bodies: string[] } | null = null;
-
-            // 各パラグラフを処理
-            const structuredContents: {
-                level: number;
-                text: string;
-                listLevel: number;
-            }[] = [];
-
-            // パラグラフのレベルを判定
-            for (const paragraph of paragraphs.items) {
-                const text = paragraph.text.trim();
-                if (!text) continue;
-
-                // リストレベルを取得（箇条書きレベル）
-                let listLevel = 0;
+                // 文書本体の存在確認
+                const body = document.body;
+                body.load("text");
                 try {
-                    if (paragraph.listItem) {
-                        listLevel = paragraph.listItem.level + 1;
-                        console.log('リストレベルを検出:', {
-                            text: text.substring(0, 50),
-                            level: listLevel
-                        });
-                    }
+                    await context.sync();
+                    console.log('文書本体の読み込みに成功しました');
                 } catch (error) {
-                    console.warn('リストレベルの取得に失敗:', {
-                        text: text.substring(0, 50),
-                        error: error instanceof Error ? error.message : String(error)
-                    });
+                    console.error('文書本体の読み込みに失敗:', error);
+                    throw new Error('文書本体の読み込みに失敗しました。文書が空でないか確認してください。');
                 }
 
-                // 箇条書きレベルに基づいてドキュメントレベルを設定
-                let level: number;
-                if (listLevel === 1) {
-                    level = 1; // サマリー
-                } else if (listLevel === 2) {
-                    level = 2; // ストーリー
-                } else if (listLevel === 3) {
-                    level = 3; // ボディ
-                } else {
-                    // リストレベルが0または不明な場合
-                    if (structuredContents.length === 0) {
-                        level = 1; // 最初の段落はサマリーとして扱う
-                        console.log('最初の段落をサマリーとして設定:', text.substring(0, 50));
-                    } else if (!currentStructure) {
-                        level = 1; // サマリーがない場合は新しいサマリーとして扱う
-                        console.log('サマリーが未設定のため、新しいサマリーとして設定:', text.substring(0, 50));
-                    } else if (!currentStory) {
-                        level = 2; // ストーリーがない場合は新しいストーリーとして扱う
-                        console.log('ストーリーが未設定のため、新しいストーリーとして設定:', text.substring(0, 50));
-                    } else {
-                        level = 3; // ボディとして扱う
-                        console.log('ボディとして設定:', text.substring(0, 50));
+                // パラグラフの取得を試行
+                const paragraphs = body.paragraphs;
+                paragraphs.load("items");
+                try {
+                    await context.sync();
+                    console.log(`パラグラフの読み込みに成功しました。段落数: ${paragraphs.items.length}`);
+                } catch (error) {
+                    console.error('パラグラフの読み込みに失敗:', error);
+                    throw new Error('文書の段落を読み込めませんでした。文書の形式を確認してください。');
+                }
+
+                if (paragraphs.items.length === 0) {
+                    console.warn('文書に段落が存在しません');
+                    return {
+                        title: "空の文書",
+                        contents: []
+                    };
+                }
+
+                // 各パラグラフの詳細情報を読み込む
+                for (const paragraph of paragraphs.items) {
+                    try {
+                        // まずテキストを読み込む
+                        paragraph.load("text");
+                        await context.sync();
+                        
+                        // リストアイテムプロパティの存在を確認
+                        try {
+                            // リストアイテムプロパティの存在を確認
+                            const properties = await context.load(paragraph, 'listItem?');
+                            await context.sync();
+
+                            // リストアイテムが存在する場合のみレベルを読み込む
+                            if (paragraph.listItem) {
+                                paragraph.listItem.load('level');
+                                await context.sync();
+                            }
+                        } catch (listError) {
+                            // リスト情報の取得に失敗した場合は、リストアイテムではないとして処理
+                            console.log('リストアイテムではありません:', paragraph.text.substring(0, 50));
+                        }
+                    } catch (paragraphError) {
+                        console.error('段落の詳細情報の読み込みに失敗:', paragraphError);
+                        // 個別の段落の読み込み失敗は無視して続行
+                        continue;
                     }
                 }
 
-                console.log('段落解析:', {
-                    text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
-                    listLevel,
-                    level: `${level} (${getLevelName(level)})`,
-                    isFirstParagraph: structuredContents.length === 0
-                });
+                // デバッグ情報の出力
+                console.log('=== 文書構造解析開始 ===');
+                console.log(`総段落数: ${paragraphs.items.length}`);
 
-                structuredContents.push({
-                    level,
-                    text,
-                    listLevel
-                });
+                // タイトルを冒頭の箇条書きでない文章から取得
+                let title = "タイトルなし";
+                let isFirstParagraph = true;
 
-                // 文書構造を更新
-                if (level === 1) {
-                    // サマリーの場合：新しい構造を開始
-                    if (currentStructure) {
-                        console.log('既存の構造を保存:', {
-                            summary: currentStructure.summary.substring(0, 50),
-                            storiesCount: currentStructure.stories.length
+                // 結果を格納する配列
+                const contents: StoryStructure[] = [];
+                let currentStructure: StoryStructure | null = null;
+                let currentStory: { story: string; bodies: string[] } | null = null;
+
+                // 各パラグラフを処理
+                for (const paragraph of paragraphs.items) {
+                    const text = paragraph.text.trim();
+                    if (!text) continue;
+
+                    // 最初の段落（タイトル）の処理
+                    if (isFirstParagraph) {
+                        try {
+                            const isListItem = paragraph.listItem !== undefined;
+                            if (!isListItem) {
+                                title = text;
+                            }
+                        } catch (error) {
+                            console.warn('リストアイテムの確認に失敗:', error);
+                        }
+                        isFirstParagraph = false;
+                        continue;
+                    }
+
+                    // リストレベルを取得
+                    let listLevel = 0;
+                    try {
+                        if (paragraph.listItem) {
+                            // リストアイテムが存在する場合のみレベルを取得
+                            listLevel = paragraph.listItem.level + 1;
+                            console.log('リストレベルを検出:', {
+                                text: text.substring(0, 50),
+                                level: listLevel
+                            });
+                        }
+                    } catch (error) {
+                        // リストレベルの取得に失敗した場合はデフォルト値を使用
+                        console.log('リストレベルの取得をスキップ:', {
+                            text: text.substring(0, 50)
                         });
-                        contents.push(currentStructure);
                     }
-                    currentStructure = {
-                        summary: text,
-                        stories: []
-                    };
-                    currentStory = null;
-                    console.log('新しいサマリーを作成:', text.substring(0, 50));
 
-                } else if (level === 2) {
-                    // ストーリーの場合：現在のサマリーに紐づけて新しいストーリーを開始
-                    if (!currentStructure) {
-                        console.log('サマリーが未設定のためストーリー用の構造を作成');
+                    // 文書レベルの決定
+                    let level: number;
+                    if (listLevel === 1) {
+                        level = 1; // サマリー
+                    } else if (listLevel === 2) {
+                        level = 2; // ストーリー
+                    } else if (listLevel === 3) {
+                        level = 3; // ボディ
+                    } else {
+                        // リストレベルが0または不明な場合
+                        if (!currentStructure) {
+                            level = 1; // 最初の段落はサマリーとして扱う
+                            console.log('最初の段落をサマリーとして設定:', text.substring(0, 50));
+                        } else if (!currentStory) {
+                            level = 2; // ストーリーがない場合は新しいストーリーとして扱う
+                            console.log('ストーリーが未設定のため、新しいストーリーとして設定:', text.substring(0, 50));
+                        } else {
+                            level = 3; // ボディとして扱う
+                            console.log('ボディとして設定:', text.substring(0, 50));
+                        }
+                    }
+
+                    console.log('段落解析:', {
+                        text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+                        listLevel,
+                        level: `${level} (${getLevelName(level)})`,
+                        isFirstParagraph: contents.length === 0
+                    });
+
+                    // 文書構造の更新
+                    if (level === 1) {
+                        // サマリーの場合：新しい構造を開始
+                        if (currentStructure) {
+                            console.log('既存の構造を保存:', {
+                                summary: currentStructure.summary.substring(0, 50),
+                                storiesCount: currentStructure.stories.length
+                            });
+                            contents.push(currentStructure);
+                        }
                         currentStructure = {
-                            summary: "要約なし",
+                            summary: text,
                             stories: []
                         };
-                    }
-                    currentStory = {
-                        story: paragraph.text,
-                        bodies: []
-                    };
-                    currentStructure.stories.push(currentStory);
-                    console.log('ストーリーを追加:', paragraph.text.substring(0, 50));
+                        currentStory = null;
+                        console.log('新しいサマリーを作成:', text.substring(0, 50));
 
-                } else if (level === 3) {
-                    // ボディの場合：現在のストーリーに紐づけてボディを追加
-                    if (!currentStructure) {
-                        console.log('サマリーが未設定のためボディ用の構造を作成');
-                        currentStructure = {
-                            summary: "要約なし",
-                            stories: []
-                        };
-                    }
-                    if (!currentStory) {
-                        console.log('ストーリーが未設定のため新しいストーリーを作成');
+                    } else if (level === 2) {
+                        // ストーリーの場合：現在のサマリーに紐づけて新しいストーリーを開始
+                        if (!currentStructure) {
+                            console.log('サマリーが未設定のためストーリー用の構造を作成');
+                            currentStructure = {
+                                summary: "要約なし",
+                                stories: []
+                            };
+                        }
                         currentStory = {
-                            story: "内容なし",
+                            story: text,
                             bodies: []
                         };
                         currentStructure.stories.push(currentStory);
+                        console.log('ストーリーを追加:', text.substring(0, 50));
+
+                    } else if (level === 3) {
+                        // ボディの場合：現在のストーリーに紐づけてボディを追加
+                        if (!currentStructure) {
+                            console.log('サマリーが未設定のためボディ用の構造を作成');
+                            currentStructure = {
+                                summary: "要約なし",
+                                stories: []
+                            };
+                        }
+                        if (!currentStory) {
+                            console.log('ストーリーが未設定のため新しいストーリーを作成');
+                            currentStory = {
+                                story: "内容なし",
+                                bodies: []
+                            };
+                            currentStructure.stories.push(currentStory);
+                        }
+                        currentStory.bodies.push(text);
+                        console.log('ボディを追加:', text.substring(0, 50));
                     }
-                    currentStory.bodies.push(paragraph.text);
-                    console.log('ボディを追加:', paragraph.text.substring(0, 50));
                 }
+
+                // 最後の構造を追加
+                if (currentStructure) {
+                    console.log('最後の構造を保存:', {
+                        summary: currentStructure.summary.substring(0, 50),
+                        storiesCount: currentStructure.stories.length
+                    });
+                    contents.push(currentStructure);
+                }
+
+                return {
+                    title,
+                    contents
+                };
+            } catch (error) {
+                console.error('Word.Run内でエラーが発生:', error);
+                throw error;
             }
-
-            // 最終結果のサマリーを出力
-            console.log('\n=== 文書構造の解析結果 ===');
-            const levelCounts = structuredContents.reduce((acc, curr) => {
-                acc[curr.level] = (acc[curr.level] || 0) + 1;
-                return acc;
-            }, {} as Record<number, number>);
-
-            console.log('段落の分類結果:', {
-                'サマリー (Level 1)': levelCounts[1] || 0,
-                'ストーリー (Level 2)': levelCounts[2] || 0,
-                'ボディ (Level 3)': levelCounts[3] || 0,
-                '詳細 (Level 4)': levelCounts[4] || 0
-            });
-
-            // 最後の構造を追加
-            if (currentStructure) {
-                console.log('最後の構造を保存:', {
-                    summary: currentStructure.summary.substring(0, 50),
-                    storiesCount: currentStructure.stories.length
-                });
-                contents.push(currentStructure);
-            }
-
-            console.log('作成された構造:', contents.map(content => ({
-                summary: content.summary.substring(0, 50),
-                storiesCount: content.stories.length,
-                totalBodies: content.stories.reduce((sum, story) => sum + story.bodies.length, 0)
-            })));
-
-            return {
-                title,
-                contents
-            };
         });
     } catch (error) {
         console.error('Error in getDocumentStructure:', error);
-        throw error;
+        if (error instanceof Error) {
+            // エラーメッセージをユーザーフレンドリーなものに変換
+            const userMessage = error.message.includes('ItemNotFound')
+                ? '文書の要素が見つかりません。文書が正しく開かれているか確認してください。'
+                : error.message.includes('AccessDenied')
+                ? '文書へのアクセスが拒否されました。読み取り専用モードを解除してください。'
+                : '文書の構造を解析できませんでした。文書が正しく開かれているか確認してください。';
+            throw new Error(userMessage);
+        }
+        throw new Error('予期せぬエラーが発生しました。文書が正しく開かれているか確認してください。');
     }
 }
 

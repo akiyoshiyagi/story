@@ -205,8 +205,8 @@ export class UIManager {
     /**
      * 位置情報からパラグラフインデックスを取得
      */
-    private async getParagraphIndex(targetText: string | undefined): Promise<number> {
-        if (!targetText) return 0;
+    private async getParagraphIndices(targetText: string | undefined): Promise<number[]> {
+        if (!targetText) return [0];
 
         try {
             const result = await Word.run(async (context) => {
@@ -215,19 +215,20 @@ export class UIManager {
                 paragraphs.load("text");
                 await context.sync();
 
-                // 対象のテキストを含むパラグラフを検索
+                const indices: number[] = [];
+                // 対象のテキストを含むすべてのパラグラフを検索
                 for (let i = 0; i < paragraphs.items.length; i++) {
                     const paragraphText = paragraphs.items[i].text.trim();
                     if (paragraphText.includes(targetText.trim())) {
-                        return i;
+                        indices.push(i);
                     }
                 }
-                return 0; // 見つからない場合は先頭のパラグラフを使用
+                return indices.length > 0 ? indices : [0]; // 見つからない場合は先頭のパラグラフを使用
             });
             return result;
         } catch (error) {
-            console.error("Error finding paragraph index:", error);
-            return 0;
+            console.error("Error finding paragraph indices:", error);
+            return [0];
         }
     }
 
@@ -249,11 +250,14 @@ export class UIManager {
                             this.commentStore[categoryId] = [];
                         }
                         
-                        const paragraphIndex = await this.getParagraphIndex(evaluation.location);
-                        this.commentStore[categoryId].push({
-                            content: this.formatComment(evaluation),
-                            paragraphIndex: paragraphIndex
-                        });
+                        // 同じ位置に複数のコメントが存在する可能性を考慮
+                        const paragraphIndices = await this.getParagraphIndices(evaluation.location);
+                        for (const paragraphIndex of paragraphIndices) {
+                            this.commentStore[categoryId].push({
+                                content: this.formatComment(evaluation),
+                                paragraphIndex: paragraphIndex
+                            });
+                        }
                     }
                 }
             }
@@ -356,11 +360,23 @@ export class UIManager {
 
                 const selectedComments = this.commentStore[selectedCategoryId];
                 if (selectedComments) {
-                    for (const { content, paragraphIndex } of selectedComments) {
-                        if (content && paragraphIndex < paragraphs.items.length) {
+                    // 同じパラグラフに対する複数のコメントをグループ化
+                    const groupedComments = selectedComments.reduce((acc, comment) => {
+                        if (!acc[comment.paragraphIndex]) {
+                            acc[comment.paragraphIndex] = [];
+                        }
+                        acc[comment.paragraphIndex].push(comment.content);
+                        return acc;
+                    }, {} as { [key: number]: string[] });
+
+                    // グループ化されたコメントを追加
+                    for (const [index, contents] of Object.entries(groupedComments)) {
+                        const paragraphIndex = parseInt(index);
+                        if (paragraphIndex < paragraphs.items.length) {
                             const paragraph = paragraphs.items[paragraphIndex];
                             const range = paragraph.getRange();
-                            range.insertComment(content);
+                            // 複数のコメントを結合して追加
+                            range.insertComment(contents.join('\n\n'));
                         }
                     }
                 }

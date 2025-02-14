@@ -7,6 +7,7 @@ import logging
 import json
 import asyncio
 import httpx
+import traceback
 
 settings = get_settings()
 
@@ -489,94 +490,91 @@ def parse_openai_response(response: Dict[str, Any]) -> List[EvaluationResult]:
                     details="応答がJSON形式ではありません"
                 )
             
-            category = json_data.get('category')
-            if not category:
-                raise EvaluationError(
-                    message="カテゴリ情報がありません",
-                    error_type="パースエラー",
-                    details="応答にカテゴリ情報が含まれていません"
-                )
+            # 評価結果のリストを格納する配列
+            evaluation_results = []
             
-            # スコアの取得と検証
-            try:
-                score = float(json_data.get('score', 0.0))
-                if not 0.0 <= score <= 1.0:
-                    raise ValueError("スコアは0から1の範囲である必要があります")
-            except (TypeError, ValueError) as e:
-                raise EvaluationError(
-                    message="無効なスコア値",
-                    error_type="パースエラー",
-                    details=f"スコアの解析に失敗: {str(e)}"
-                )
+            # 単一の評価結果か複数の評価結果かを判定
+            if isinstance(json_data.get('evaluations'), list):
+                # 複数の評価結果の場合
+                evaluations = json_data['evaluations']
+            else:
+                # 単一の評価結果の場合は配列に変換
+                evaluations = [json_data]
             
-            # フィードバックの取得と形式統一
-            feedback = json_data.get('feedback', [])
-            if isinstance(feedback, str):
-                feedback = [feedback]
-            elif not isinstance(feedback, list):
-                feedback = [str(feedback)]
-            
-            # 改善提案の取得と統合
-            suggestions = json_data.get('improvement_suggestions', [])
-            if isinstance(suggestions, str):
-                suggestions = [suggestions]
-            elif not isinstance(suggestions, list):
-                suggestions = [str(suggestions)]
-            
-            # フィードバックと改善提案を統合
-            all_feedback = []
-            for item in feedback:
-                if item and not item.startswith('•'):
-                    all_feedback.append(f"• {item}")
-                else:
-                    all_feedback.append(item)
-            
-            if suggestions:
-                all_feedback.append("【改善提案】")
-                for item in suggestions:
+            # 各評価結果をパース
+            for evaluation in evaluations:
+                category = evaluation.get('category')
+                if not category:
+                    continue
+                
+                # スコアの取得と検証
+                try:
+                    score = float(evaluation.get('score', 0.0))
+                    if not 0.0 <= score <= 1.0:
+                        raise ValueError("スコアは0から1の範囲である必要があります")
+                except (TypeError, ValueError) as e:
+                    continue
+                
+                # フィードバックの取得と形式統一
+                feedback = evaluation.get('feedback', [])
+                if isinstance(feedback, str):
+                    feedback = [feedback]
+                elif not isinstance(feedback, list):
+                    feedback = [str(feedback)]
+                
+                # 改善提案の取得と統合
+                suggestions = evaluation.get('improvement_suggestions', [])
+                if isinstance(suggestions, str):
+                    suggestions = [suggestions]
+                elif not isinstance(suggestions, list):
+                    suggestions = [str(suggestions)]
+                
+                # フィードバックと改善提案を統合
+                all_feedback = []
+                for item in feedback:
                     if item and not item.startswith('•'):
                         all_feedback.append(f"• {item}")
                     else:
                         all_feedback.append(item)
+                
+                if suggestions:
+                    all_feedback.append("【改善提案】")
+                    for item in suggestions:
+                        if item and not item.startswith('•'):
+                            all_feedback.append(f"• {item}")
+                        else:
+                            all_feedback.append(item)
+                
+                feedback_text = '\n'.join(all_feedback)
+                
+                # 評価結果オブジェクトを作成（各評価結果を個別に保持）
+                result = EvaluationResult(
+                    category_id=category,
+                    category_name=category,  # カテゴリ名は後で設定される
+                    priority=0,  # 優先度は後で設定される
+                    locations=[{
+                        "location": evaluation.get('target_text', '全体'),
+                        "comments": [{
+                            "criteria_id": category,
+                            "content": feedback_text,
+                            "score": score
+                        }]
+                    }],
+                    score=score,
+                    feedback=feedback_text,
+                    target_text=evaluation.get('target_text', ''),
+                    position=None  # 位置情報は後で設定される
+                )
+                
+                evaluation_results.append(result)
             
-            feedback_text = '\n'.join(all_feedback)
-            
-            # 対象テキストの取得
-            target_text = json_data.get('target_text', '')
-            
-            # LocationCommentsオブジェクトを作成
-            location_comments = [{
-                "location": target_text or "全体",
-                "comments": [{
-                    "criteria_id": category,
-                    "content": feedback_text,
-                    "score": score
-                }]
-            }]
-            
-            # 評価結果オブジェクトを作成
-            result = EvaluationResult(
-                category_id=category,
-                category_name=category,
-                priority=1,
-                locations=location_comments,
-                score=score,
-                feedback=feedback_text,
-                target_text=target_text
-            )
-            
-            logging.info(f"パース成功: カテゴリ={category}, スコア={score}")
-            logging.debug(f"フィードバック:\n{feedback_text}")
-            return [result]
-            
-        except EvaluationError:
-            raise
+            return evaluation_results
             
         except Exception as e:
-            logging.error(f"予期せぬエラー: {type(e).__name__} - {str(e)}")
-            logging.error(f"パース対象テキスト:\n{evaluation_text}")
+            logging.error(f"評価結果のパース中にエラー: {str(e)}")
+            logging.error(f"エラー詳細: {traceback.format_exc()}")
             raise EvaluationError(
-                message="予期せぬエラー",
+                message="評価結果のパースに失敗",
                 error_type="パースエラー",
                 details=f"評価結果の解析中に予期せぬエラーが発生: {str(e)}"
             )

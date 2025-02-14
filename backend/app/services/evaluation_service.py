@@ -608,17 +608,17 @@ class EvaluationService:
                 elif severity == "軽微":
                     score = 0.8
 
+                # フィードバックの結合
+                feedback = "\n".join(feedback_parts)
+                self.logger.debug(f"生成されたフィードバック:\n{feedback}")
+
                 # 位置情報の取得
                 position = None
                 if target_text:
                     position = self._find_text_position(target_text, document_structure)
                     self.logger.debug(f"位置情報: {position}")
 
-                # フィードバックの結合
-                feedback = "\n".join(feedback_parts)
-                self.logger.debug(f"生成されたフィードバック:\n{feedback}")
-
-                # 評価結果の生成
+                # 評価結果の生成（各セクションごとに個別の評価結果を生成）
                 result = EvaluationResult(
                     category_id=criteria_id,
                     category_name=self._get_category_name(criteria_id),
